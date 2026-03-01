@@ -69,10 +69,15 @@ The setup script automatically installs OpenJDK 21, Node.js, and tmux.
 ## File Structure
 
 ```
-~/mc-control/       ← panel files (server.js, config.json)
-~/minecraft/        ← server files (server.jar, worlds, plugins, mods)
-~/start-mc.sh       ← foreground launcher
-~/start-mc-bg.sh    ← background launcher (tmux)
+~/mc-control/
+├── server.js          ← Backend & API
+├── package.json       ← Node dependencies
+├── config.json        ← Saved settings
+├── node_modules/      ← Installed packages
+└── public/
+    ├── index.html     ← UI layout
+    ├── style.css      ← Styling
+    └── app.js         ← Client-side logic
 ```
 
 ---
