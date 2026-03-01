@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ╔══════════════════════════════════════════════════════════╗
-# ║            MC Control — Termux Setup Script              ║
-# ║         Full Aternos-style panel · Java Edition          ║
+# ║            DroidMC — Termux Setup Script                 ║
+# ║         Minecraft server panel for Android               ║
 # ╚══════════════════════════════════════════════════════════╝
 
 set -e
@@ -25,7 +25,7 @@ step() {
 
 clear
 echo ""
-echo -e "${G}  ⬛  MC CONTROL v2 — Setup${N}"
+echo -e "${G}  🤖  DroidMC — Setup${N}"
 echo -e "${D}  Full Minecraft server panel for Termux${N}"
 echo ""
 
@@ -37,17 +37,22 @@ if [ ! -d "/data/data/com.termux" ]; then
 fi
 
 # ── Download project files from GitHub ───────────────────────────────────────
-step "Downloading MC Control files"
+step "Downloading DroidMC files"
 
-REPO_RAW="https://raw.githubusercontent.com/loaf1ms/mc-control/main"
-UI_DIR_EARLY="$HOME/mc-control"
+REPO_RAW="https://raw.githubusercontent.com/loaf1ms/droid-mc/main"
+UI_DIR_EARLY="$HOME/droid-mc"
 mkdir -p "$UI_DIR_EARLY"
 
 info "Downloading server.js..."
 curl -fsSL "$REPO_RAW/server.js"    -o "$UI_DIR_EARLY/server.js"    || err "Failed to download server.js — check your internet connection"
 info "Downloading package.json..."
 curl -fsSL "$REPO_RAW/package.json" -o "$UI_DIR_EARLY/package.json" || err "Failed to download package.json"
-log "Files downloaded to ~/mc-control/"
+info "Downloading UI files..."
+mkdir -p "$UI_DIR_EARLY/public"
+curl -fsSL "$REPO_RAW/public/index.html" -o "$UI_DIR_EARLY/public/index.html" || err "Failed to download index.html"
+curl -fsSL "$REPO_RAW/public/style.css"  -o "$UI_DIR_EARLY/public/style.css"  || err "Failed to download style.css"
+curl -fsSL "$REPO_RAW/public/app.js"     -o "$UI_DIR_EARLY/public/app.js"     || err "Failed to download app.js"
+log "Files downloaded to ~/droid-mc/" 
 
 # ── Step 1: Install packages ──────────────────────────────────────────────────
 step "Step 1/5 — Installing packages"
@@ -102,7 +107,7 @@ log "Server RAM defaulted to 2G (change anytime in the Settings tab)"
 step "Step 3/5 — Setting up directories"
 
 MC_DIR="$HOME/minecraft"
-UI_DIR="$HOME/mc-control"
+UI_DIR="$HOME/droid-mc"
 mkdir -p "$MC_DIR" "$UI_DIR"
 log "Server folder:  $MC_DIR"
 log "Panel folder:   $UI_DIR"
@@ -110,7 +115,7 @@ log "Panel folder:   $UI_DIR"
 # Copy server.js if it's next to this script (and not already in the right place)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ "$SCRIPT_DIR" = "$UI_DIR" ]; then
-  # Already running from inside mc-control/ — nothing to copy
+  # Already running from inside droid-mc/ — nothing to copy
   log "server.js already in place"
 elif [ -f "$SCRIPT_DIR/server.js" ]; then
   cp "$SCRIPT_DIR/server.js" "$UI_DIR/server.js"
@@ -125,7 +130,7 @@ fi
 # Write package.json
 cat > "$UI_DIR/package.json" << 'PKGJSON'
 {
-  "name": "mc-control",
+  "name": "droid-mc",
   "version": "2.0.0",
   "description": "Minecraft Server Panel for Termux",
   "main": "server.js",
@@ -169,7 +174,7 @@ step "Step 5/5 — Creating launch scripts"
 # Normal start script
 cat > "$HOME/start-mc.sh" << STARTSCRIPT
 #!/data/data/com.termux/files/usr/bin/bash
-# MC Control v2 — Launch script
+# DroidMC — Launch script
 # Change MC_RAM below to adjust memory
 
 MC_RAM="$MC_RAM"
@@ -182,7 +187,7 @@ command -v termux-wake-lock &>/dev/null && termux-wake-lock
 LOCAL_IP=\$(hostname -I 2>/dev/null | awk '{print \$1}')
 
 echo ""
-echo -e "  ⬛  MC Control starting..."
+echo -e "  🤖  DroidMC starting..."
 echo -e "  Browser (this phone):  http://localhost:\$UI_PORT"
 [ -n "\$LOCAL_IP" ] && echo -e "  Browser (same WiFi):   http://\$LOCAL_IP:\$UI_PORT"
 echo -e "  Use the Version tab to download a server JAR if you haven't yet."
@@ -201,7 +206,7 @@ log "Created ~/start-mc.sh"
 if command -v tmux &>/dev/null; then
   cat > "$HOME/start-mc-bg.sh" << BGSCRIPT
 #!/data/data/com.termux/files/usr/bin/bash
-# MC Control — Background mode (tmux)
+# DroidMC — Background mode (tmux)
 # Server keeps running even if you close the Termux window
 
 MC_RAM="$MC_RAM"
@@ -212,7 +217,7 @@ command -v termux-wake-lock &>/dev/null && termux-wake-lock
 
 if tmux has-session -t mc 2>/dev/null; then
   echo ""
-  echo "  MC Control is already running."
+  echo "  DroidMC is already running."
   echo "  Re-attach: tmux attach -t mc"
   echo "  Kill:      tmux kill-session -t mc"
   echo ""
@@ -222,7 +227,7 @@ else
 
   LOCAL_IP=\$(hostname -I 2>/dev/null | awk '{print \$1}')
   echo ""
-  echo "  ⬛  MC Control started in background (tmux: mc)"
+  echo "  🤖  DroidMC started in background (tmux: mc)"
   echo "  Browser (this phone): http://localhost:\$UI_PORT"
   [ -n "\$LOCAL_IP" ] && echo "  Browser (WiFi):       http://\$LOCAL_IP:\$UI_PORT"
   echo ""

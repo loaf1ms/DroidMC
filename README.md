@@ -1,4 +1,4 @@
-# MC Control — by loaf1ms
+# DroidMC — by loaf1ms
 
 Minecraft server panel that runs directly on your Android phone via Termux. Control your server from any browser on the same WiFi.
 
@@ -17,7 +17,7 @@ pkg update && pkg upgrade -y
 Paste this in Termux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/loaf1ms/mc-control/main/setup.sh -o setup.sh
+curl -fsSL https://raw.githubusercontent.com/loaf1ms/droid-mc/main/setup.sh -o setup.sh
 bash setup.sh
 ```
 
@@ -69,7 +69,7 @@ The setup script automatically installs OpenJDK 21, Node.js, and tmux.
 ## File Structure
 
 ```
-~/mc-control/
+~/droid-mc/
 ├── server.js          ← Backend & API
 ├── package.json       ← Node dependencies
 ├── config.json        ← Saved settings

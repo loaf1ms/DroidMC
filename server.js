@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MC Control v2 — Full Minecraft Server Panel for Termux
+ * DroidMC — Full Minecraft Server Panel for Termux
  * Like Aternos, but on your phone. http://localhost:8080
  */
 
@@ -25,7 +25,7 @@ let startTime     = null;
 let downloadState = null;
 let systemStats   = { cpu: 0, ram: 0 };
 
-const CONFIG_FILE = path.join(process.env.HOME || '/data/data/com.termux/files/home', 'mc-control', 'config.json');
+const CONFIG_FILE = path.join(process.env.HOME || '/data/data/com.termux/files/home', 'droid-mc', 'config.json');
 const CONFIG_DEFAULTS = {
   serverJar: process.env.MC_JAR  || 'server.jar',
   serverDir: process.env.MC_DIR  || `${process.env.HOME || '/data/data/com.termux/files/home'}/minecraft`,
@@ -116,7 +116,7 @@ function getUptime() {
 function httpsGet(url, depth = 0) {
   return new Promise((resolve, reject) => {
     if (depth > 5) return reject(new Error('Too many redirects'));
-    https.get(url, { headers: { 'User-Agent': 'MC-Control/2.0 (termux-panel)' } }, res => {
+    https.get(url, { headers: { 'User-Agent': 'DroidMC/2.0 (termux-panel)' } }, res => {
       if (res.statusCode >= 300 && res.headers.location)
         return httpsGet(res.headers.location, depth + 1).then(resolve).catch(reject);
       let data = '';
@@ -382,7 +382,7 @@ app.post('/api/download', async (req, res) => {
         const doGetInst = (url, depth = 0) => {
           if (depth > 5) return reject(new Error('Too many redirects'));
           const mod = url.startsWith('https') ? https : http;
-          mod.get(url, { headers: { 'User-Agent': 'MC-Control/2.0' } }, response => {
+          mod.get(url, { headers: { 'User-Agent': 'DroidMC/2.0' } }, response => {
             if (response.statusCode >= 300 && response.headers.location) return doGetInst(response.headers.location, depth + 1);
             if (response.statusCode !== 200) return reject(new Error(`HTTP ${response.statusCode}`));
             downloadState.total = parseInt(response.headers['content-length'] || '0');
@@ -437,7 +437,7 @@ app.post('/api/download', async (req, res) => {
       const doGet = (url, depth = 0) => {
         if (depth > 5) return reject(new Error('Too many redirects'));
         const mod = url.startsWith('https') ? https : http;
-        mod.get(url, { headers: { 'User-Agent': 'MC-Control/2.0' } }, response => {
+        mod.get(url, { headers: { 'User-Agent': 'DroidMC/2.0' } }, response => {
           if (response.statusCode >= 300 && response.headers.location)
             return doGet(response.headers.location, depth + 1);
           if (response.statusCode !== 200)
@@ -494,7 +494,7 @@ wss.on('connection', ws => {
 setInterval(updateSystemStats, 1000);
 
 server.listen(CONFIG.uiPort, '0.0.0.0', () => {
-  console.log(`\n  ⬛ MC Control v2  →  http://localhost:${CONFIG.uiPort}\n`);
+  console.log(`\n  🤖 DroidMC  →  http://localhost:${CONFIG.uiPort}\n`);
 });
 
 // ─── HTML ─────────────────────────────────────────────────────────────────────
