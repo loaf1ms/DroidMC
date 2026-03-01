@@ -1,10 +1,16 @@
 # MC Control — by loaf1ms
 
-Aternos-style Minecraft server panel that runs directly on your Android phone via Termux. Control your server from any browser on the same WiFi.
+Minecraft server panel that runs directly on your Android phone via Termux. Control your server from any browser on the same WiFi.
 
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/u6tE8DzS5V)
 
 ---
+
+## First, update Termux packages:
+
+```bash
+pkg update && pkg upgrade -y
+```
 
 ## Install
 
