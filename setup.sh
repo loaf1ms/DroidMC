@@ -285,20 +285,3 @@ echo -e "${G}==============================================${N}"
 echo -e "${G}  Setup complete${N}"
 echo -e "${G}==============================================${N}"
 echo ""
-echo -e "  ${D}Start the panel:${N}"
-echo -e "    ${G}~/start-mc.sh${N}"
-if command -v tmux >/dev/null 2>&1; then
-  echo -e "    ${G}~/start-mc-bg.sh${N} ${D}(recommended)${N}"
-fi
-echo ""
-echo -e "  ${D}Open in your browser:${N}"
-echo -e "    ${G}http://localhost:8080${N}"
-echo ""
-LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-if [ -n "$LOCAL_IP" ]; then
-  echo -e "  ${D}LAN address:${N}"
-  echo -e "    ${G}$LOCAL_IP${N}"
-  echo ""
-fi
-echo -e "  ${A}Keep your phone plugged in while the server runs.${N}"
-echo ""
