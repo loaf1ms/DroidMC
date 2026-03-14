@@ -103,3 +103,5 @@ echo -e "${G}==============================================${N}"
 echo ""
 [ "$REMOVE_WORLD" -eq 0 ] && echo -e "  ${D}Your world is safe at ~/minecraft/${N}"
 echo ""
+
+rm -f "$0"
