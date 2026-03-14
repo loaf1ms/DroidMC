@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <!-- TOP HEADER BAR -->
@@ -443,199 +443,6 @@
 
           <!-- Bottom Row -->
           <div class="dash-bottom">
-            <!-- Server Plan -->
-            <div class="panel plan-panel">
-              <div class="plan-header">
-                <div class="plan-header-info">
-                  <div class="plan-name-lg">
-                    Server <span class="plan-tag">Overview</span>
-                  </div>
-                  <div class="plan-header-sub">
-                    Current server status and resources
-                  </div>
-                </div>
-                <div
-                  id="statusBadge2"
-                  class="status-badge stopped"
-                  style="margin-left: auto"
-                >
-                  <div class="badge-dot"></div>
-                  <span id="badgeTxt2">STOPPED</span>
-                </div>
-              </div>
-
-              <div class="plan-res-grid">
-                <div class="plan-res-card">
-                  <div class="plan-res-label">
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                      <path
-                        d="M2 3h9v7H2V3Z"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linejoin="round"
-                      />
-                      <path
-                        d="M4 5.5V5M6.5 5.5V5M9 5.5V5"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"
-                      />
-                      <path
-                        d="M2 6.5H1M11 6.5h1"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"
-                      />
-                    </svg>
-                    RAM
-                  </div>
-                  <div class="plan-res-val" id="planRam">─</div>
-                  <div class="plan-res-bar">
-                    <div
-                      class="plan-res-fill ram"
-                      id="planRamBar"
-                      style="width: 0%"
-                    ></div>
-                  </div>
-                  <div class="plan-res-sub" id="planRamSub">of 4 GB</div>
-                </div>
-                <div class="plan-res-card">
-                  <div class="plan-res-label">
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                      <rect
-                        x="3"
-                        y="3"
-                        width="7"
-                        height="7"
-                        rx="1.5"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                      />
-                      <path
-                        d="M4 1v1M9 1v1M4 11v1M9 11v1M1 4h1M1 9h1M11 4h1M11 9h1"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"
-                      />
-                    </svg>
-                    CPU
-                  </div>
-                  <div class="plan-res-val" id="planCpu">─</div>
-                  <div class="plan-res-bar">
-                    <div
-                      class="plan-res-fill cpu"
-                      id="planCpuBar"
-                      style="width: 0%"
-                    ></div>
-                  </div>
-                  <div class="plan-res-sub">of 200% max</div>
-                </div>
-                <div class="plan-res-card">
-                  <div class="plan-res-label">
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                      <circle
-                        cx="6.5"
-                        cy="6.5"
-                        r="5"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                      />
-                      <path
-                        d="M6.5 4v2.5l1.5 1.5"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                    Uptime
-                  </div>
-                  <div class="plan-res-val" id="planUp" style="font-size: 14px">
-                    Offline
-                  </div>
-                  <div class="plan-res-sub" id="planUpSub">Not running</div>
-                </div>
-                <div class="plan-res-card">
-                  <div class="plan-res-label">👥 Players</div>
-                  <div class="plan-res-val green" id="planPl">0</div>
-                  <div class="plan-res-sub">online now</div>
-                </div>
-              </div>
-
-              <div class="plan-connect">
-                <div class="plan-connect-row">
-                  <span class="plan-connect-lbl">📡 IP</span>
-                  <span class="plan-connect-val" id="planIP">─</span>
-                  <button
-                    class="icon-btn"
-                    onclick="copyTxt('planIP')"
-                    title="Copy"
-                  >
-                    ⎘
-                  </button>
-                </div>
-                <div class="plan-connect-row">
-                  <span class="plan-connect-lbl">🔌 Port</span>
-                  <span class="plan-connect-val">25565</span>
-                </div>
-                <div class="plan-connect-row">
-                  <span class="plan-connect-lbl">📦 Type</span>
-                  <span class="plan-connect-val" id="planType">─</span>
-                </div>
-                <div class="plan-connect-row">
-                  <span class="plan-connect-lbl">🏷 Ver</span>
-                  <span class="plan-connect-val" id="planVer">─</span>
-                </div>
-              </div>
-
-              <div class="server-actions" style="margin-top: 14px">
-                <button
-                  class="abtn primary"
-                  id="btnStartMain"
-                  onclick="srvAct('start')"
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M2.5 2L11 6.5L2.5 11V2Z" fill="currentColor" />
-                  </svg>
-                  Start
-                </button>
-                <button
-                  class="abtn ghost"
-                  id="btnStop"
-                  onclick="srvAct('stop')"
-                  disabled
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <rect
-                      x="2.5"
-                      y="2.5"
-                      width="8"
-                      height="8"
-                      rx="1.5"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  Stop
-                </button>
-                <button
-                  class="abtn danger"
-                  id="btnKill"
-                  onclick="killSrv()"
-                  disabled
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path
-                      d="M2 2l9 9M11 2l-9 9"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                  Kill
-                </button>
-              </div>
-            </div>
-
             <!-- Server Display / MOTD -->
             <div class="panel">
               <div class="panel-header-row">
@@ -866,15 +673,11 @@ A DroidMC Minecraft Server</textarea
             <div
               style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px"
             >
-              <button class="qbtn" onclick="offBan()">
-                🔨 Ban Player
-              </button>
+              <button class="qbtn" onclick="offBan()">🔨 Ban Player</button>
               <button class="qbtn" onclick="offPardon()">
                 🤝 Pardon Player
               </button>
-              <button class="qbtn" onclick="offAct('op')">
-                ⭐ Give OP
-              </button>
+              <button class="qbtn" onclick="offAct('op')">⭐ Give OP</button>
               <button class="qbtn" onclick="offAct('deop')">
                 ❌ Remove OP
               </button>

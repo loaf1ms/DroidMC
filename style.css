@@ -399,7 +399,7 @@ body {
 /* ─── DASHBOARD BOTTOM ROW ─── */
 .dash-bottom {
   display: grid;
-  grid-template-columns: 1fr 1.4fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   margin-bottom: 14px;
 }

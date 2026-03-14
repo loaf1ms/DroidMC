@@ -75,9 +75,6 @@ function setR(r){
   const badge=document.getElementById('statusBadge');
   const badgeTxt=document.getElementById('badgeTxt');
   if(badge){badge.className='status-badge '+(r?'running':'stopped');badgeTxt.textContent=r?'RUNNING':'STOPPED';}
-  const badge2=document.getElementById('statusBadge2');
-  const badgeTxt2=document.getElementById('badgeTxt2');
-  if(badge2){badge2.className='status-badge '+(r?'running':'stopped');badgeTxt2.textContent=r?'RUNNING':'STOPPED';}
   // Status text in stat card
   const ds=document.getElementById('dStatus');
   if(ds){ds.textContent=r?'Currently running':'Not currently running';}
@@ -107,8 +104,6 @@ function setPl(list){
   players=list||[];const n=players.length;
   document.getElementById('tPl').textContent=n;
   document.getElementById('plCount').textContent=n+' online';
-  const planPl=document.getElementById('planPl');
-  if(planPl)planPl.textContent=n;
   const nb=document.getElementById('nbPl');
   let b=nb.querySelector('.bdg');
   if(n>0){if(!b){b=document.createElement('div');b.className='bdg';nb.appendChild(b);}b.textContent=n>9?'9+':n;}
@@ -128,11 +123,6 @@ function setUp(u){
   }
   const ds=document.getElementById('dStatus');
   if(ds&&!u)ds.textContent='Not currently running';
-  // Plan panel uptime
-  const planUp=document.getElementById('planUp');
-  const planUpSub=document.getElementById('planUpSub');
-  if(planUp){planUp.textContent=u||'Offline';planUp.style.color=u?'var(--t)':'var(--td)';}
-  if(planUpSub)planUpSub.textContent=u?'running':'Not running';
 }
 
 function parseMemoryToMB(value){
@@ -188,17 +178,6 @@ function updStats(s){
   if(cpuSub)cpuSub.textContent='of 200% max';
   if(ramSub)ramSub.textContent=ramLimitMB>0?'of '+ramLimitTxt+' ('+ramPct.toFixed(1)+'%)':'Memory limit unavailable';
   if(diskSub)diskSub.textContent=diskTotal>0?'of '+fmtB(diskTotal)+' ('+diskPct.toFixed(1)+'%)':'Storage unavailable';
-  // Plan panel mini cards
-  const planCpu=document.getElementById('planCpu');
-  const planRam=document.getElementById('planRam');
-  const planCpuBar=document.getElementById('planCpuBar');
-  const planRamBar=document.getElementById('planRamBar');
-  const planRamSub=document.getElementById('planRamSub');
-  if(planCpu){planCpu.textContent=cpuTxt+'%';planCpu.style.color=cpuCol;}
-  if(planRam){planRam.textContent=ramTxt;planRam.style.color=ramCol;}
-  if(planCpuBar){planCpuBar.style.width=Math.min(cpu/2,100)+'%';planCpuBar.style.background=cpuCol;}
-  if(planRamBar){planRamBar.style.width=ramPct+'%';planRamBar.style.background=ramCol;}
-  if(planRamSub)planRamSub.textContent=ramLimitMB>0?'of '+ramLimitTxt+' ('+ramPct.toFixed(1)+'%)':'Memory limit unavailable';
 }
 
 function apCfg(c){
@@ -214,11 +193,6 @@ function apCfg(c){
   const ciVer=document.getElementById('ciVer');
   if(ciType&&c.serverType)ciType.textContent=c.serverType.charAt(0).toUpperCase()+c.serverType.slice(1);
   if(ciVer&&c.serverVersion)ciVer.textContent=c.serverVersion;
-  // Plan panel
-  const planType=document.getElementById('planType');
-  const planVer=document.getElementById('planVer');
-  if(planType&&c.serverType)planType.textContent=c.serverType.charAt(0).toUpperCase()+c.serverType.slice(1);
-  if(planVer&&c.serverVersion)planVer.textContent=c.serverVersion;
   updStats(lastStats);
 }
 
@@ -228,8 +202,6 @@ function apNetwork(network,config){
   const lanIp=networkInfo.lanIp||location.hostname||'127.0.0.1';
   document.getElementById('aLAN').textContent=`${lanIp}:${port}`;
   document.getElementById('ciIP').textContent=lanIp;
-  const planIP=document.getElementById('planIP');
-  if(planIP)planIP.textContent=lanIp;
 }
 
 // ─ Players ─
