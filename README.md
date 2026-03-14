@@ -37,22 +37,16 @@ Or on the same device: `http://localhost:8080`
 
 ## Update
 
-To pull the latest panel files without touching your world data:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/loaf1ms/DroidMC/main/update.sh -o update.sh
-bash update.sh
-```
-
-The update script backs up your current panel files before downloading, verifies checksums, and automatically restores your backup if anything goes wrong. It will also offer to restart the server once the update is applied.
+Just rerun the setup script — it will detect your existing install and ask if you want to reinstall over it. Your world data is never touched.
 
 ---
 
 ## Uninstall
 
+`uninstall.sh` is downloaded automatically during setup:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/loaf1ms/DroidMC/main/uninstall.sh -o uninstall.sh
-bash uninstall.sh
+~/uninstall-mc.sh
 ```
 
 You'll be asked whether to keep or delete your world data, and given a final confirmation before anything is removed.

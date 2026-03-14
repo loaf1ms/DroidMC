@@ -33,7 +33,7 @@ if [ ! -d "/data/data/com.termux" ]; then
   [[ "$cont" != "y" && "$cont" != "Y" ]] && exit 1
 fi
 
-DROIDMC_VERSION="2.1.0"
+DROIDMC_VERSION="2.1.1"
 REPO_RAW="https://raw.githubusercontent.com/loaf1ms/DroidMC/main"
 UI_DIR_EARLY="$HOME/DroidMC"
 
@@ -48,7 +48,7 @@ if [ -f "$UI_DIR_EARLY/.version" ]; then
   echo ""
   read -p "  Choice [1/2]: " install_choice
   if [[ "$install_choice" != "1" ]]; then
-    info "Cancelled. Run ~/start-mc.sh to launch, or update.sh to update."
+    info "Cancelled. Run ~/start-mc.sh to launch, or rerun setup.sh to update."
     exit 0
   fi
   warn "Reinstalling DroidMC $DROIDMC_VERSION over $INSTALLED_VER..."
@@ -66,6 +66,9 @@ info "Downloading UI files..."
 curl -fsSL "$REPO_RAW/index.html" -o "$UI_DIR_EARLY/public/index.html" || err "Failed to download index.html"
 curl -fsSL "$REPO_RAW/style.css" -o "$UI_DIR_EARLY/public/style.css" || err "Failed to download style.css"
 curl -fsSL "$REPO_RAW/app.js" -o "$UI_DIR_EARLY/public/app.js" || err "Failed to download app.js"
+info "Downloading uninstall.sh..."
+curl -fsSL "$REPO_RAW/uninstall.sh" -o "$HOME/uninstall-mc.sh" || warn "Failed to download uninstall.sh (non-fatal)"
+chmod +x "$HOME/uninstall-mc.sh" 2>/dev/null || true
 log "Files downloaded to ~/DroidMC/"
 
 # ── Checksum verification ────────────────────────────────────────────────────
@@ -284,4 +287,6 @@ echo ""
 echo -e "${G}==============================================${N}"
 echo -e "${G}  Setup complete${N}"
 echo -e "${G}==============================================${N}"
+echo ""
+echo -e "  ${A}TIP: Keep your phone plugged in while the server runs.${N}"
 echo ""
