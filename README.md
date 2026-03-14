@@ -70,7 +70,12 @@ You'll be asked whether to keep or delete your world data, and given a final con
 ## Requirements
 
 - Android device running Termux
-- 2GB+ RAM recommended (4GB+ for a smooth experience)
+- 2-4GB RAM reccomended
+- 4GB+ for a smooth experience
+- Not reccomended going lower than 2GB
+- 500MHZ soc minimum
+- 2GHZ reccomended
+- 2GHZ+ for a smooth experience
 
 The setup script automatically installs OpenJDK 21, Node.js, and tmux.
 
