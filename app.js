@@ -1,4 +1,4 @@
-let ws,isRunning=false,curF='all',allLogs=[],players=[],selT='paper',propsData={};
+let ws,isRunning=false,curF='all',allLogs=[],players=[],selT='paper',propsData={},networkInfo={lanIp:'',addresses:[]};
 
 function connect(){
   const p=location.protocol==='https:'?'wss':'ws';
@@ -107,21 +107,24 @@ function setUp(u){
 
 function updStats(s){
   const circ=131.95; // 2π×21
-  const cpuCls=s.cpu>70?'crit':s.cpu>40?'warn':'';
-  const ramCls=s.ram>80?'crit':s.ram>60?'warn':'';
-  const cpuCol=s.cpu>70?'var(--red)':s.cpu>40?'var(--amber)':'var(--green)';
-  const ramCol=s.ram>80?'var(--red)':s.ram>60?'var(--amber)':'var(--green)';
+  const cpu=Number(s.cpu)||0;
+  const ram=Number(s.ram)||0;
+  const cpuCls=cpu>70?'crit':cpu>40?'warn':'';
+  const ramCls=ram>80?'crit':ram>60?'warn':'';
+  const cpuCol=cpu>70?'var(--red)':cpu>40?'var(--amber)':'var(--green)';
+  const ramCol=ram>80?'var(--red)':ram>60?'var(--amber)':'var(--green)';
+  const cpuTxt=cpu%1===0?cpu.toFixed(0):cpu.toFixed(1);
   const cpuEl=document.getElementById('dCpu');const ramEl=document.getElementById('dRam');
-  cpuEl.textContent=s.cpu+'%';cpuEl.style.color=cpuCol;
-  ramEl.textContent=s.ram+'%';ramEl.style.color=ramCol;
-  document.getElementById('tCpu').textContent=s.cpu+'%';
-  document.getElementById('tRam').textContent=s.ram+'%';
+  cpuEl.textContent=cpuTxt+'%';cpuEl.style.color=cpuCol;
+  ramEl.textContent=ram+'%';ramEl.style.color=ramCol;
+  document.getElementById('tCpu').textContent=cpuTxt+'%';
+  document.getElementById('tRam').textContent=ram+'%';
   const cpuG=document.getElementById('cpuGaugeFill');
   const ramG=document.getElementById('ramGaugeFill');
   const cpuP=document.getElementById('cpuGaugePct');
   const ramP=document.getElementById('ramGaugePct');
-  if(cpuG){cpuG.style.strokeDasharray=`${s.cpu/100*circ} ${circ}`;cpuG.className='gauge-fill'+(cpuCls?' '+cpuCls:'');}
-  if(ramG){ramG.style.strokeDasharray=`${s.ram/100*circ} ${circ}`;ramG.className='gauge-fill'+(ramCls?' '+ramCls:'');}
+  if(cpuG){cpuG.style.strokeDasharray=`${cpu/100*circ} ${circ}`;cpuG.className='gauge-fill'+(cpuCls?' '+cpuCls:'');}
+  if(ramG){ramG.style.strokeDasharray=`${ram/100*circ} ${circ}`;ramG.className='gauge-fill'+(ramCls?' '+ramCls:'');}
   if(cpuP)cpuP.style.color=cpuCol;
   if(ramP)ramP.style.color=ramCol;
 }
@@ -138,6 +141,14 @@ function apCfg(c){
   const ciVer=document.getElementById('ciVer');
   if(ciType&&c.serverType)ciType.textContent=c.serverType.charAt(0).toUpperCase()+c.serverType.slice(1);
   if(ciVer&&c.serverVersion)ciVer.textContent=c.serverVersion;
+}
+
+function apNetwork(network,config){
+  networkInfo=network||{lanIp:'',addresses:[]};
+  const port=(config&&config.uiPort)||location.port||'8080';
+  const lanIp=networkInfo.lanIp||location.hostname||'127.0.0.1';
+  document.getElementById('aLAN').textContent=`${lanIp}:${port}`;
+  document.getElementById('ciIP').textContent=lanIp;
 }
 
 // ─ Players ─
@@ -285,7 +296,7 @@ async function loadVI(){
   const ex=document.getElementById('iEx');
   ex.textContent=d.jarExists?'✅ Yes':'❌ No';
   ex.style.color=d.jarExists?'var(--green)':'var(--red)';
-  setR(d.running);setPl(d.players);setUp(d.uptime);apCfg(d.config);
+  setR(d.running);setPl(d.players);setUp(d.uptime);apCfg(d.config);apNetwork(d.network,d.config);
 }
 
 // ─ Properties ─
@@ -556,9 +567,8 @@ function copyTxt(id){
 }
 
 // ─ Init ─
-connect();loadVerList();
-document.getElementById('aLAN').textContent=location.host;
-document.getElementById('ciIP').textContent=location.hostname;
+connect();loadVerList();loadVI();
+apNetwork(null,null);
 
 document.addEventListener('keydown',e=>{
   if(e.key==='/'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT'){

@@ -17,10 +17,10 @@ const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocketServer({ server });
 
-// ─── State ────────────────────────────────────────────────────────────────────
+// --- State --------------------------------------------------------------------
 let mcProcess     = null;
 let logHistory    = [];
-let onlinePlayers = {};   // name → { name, joined }
+let onlinePlayers = {};   // name ? { name, joined }
 let startTime     = null;
 let downloadState = null;
 let systemStats   = { cpu: 0, ram: 0 };
@@ -45,7 +45,7 @@ function saveConfig() {
 }
 const CONFIG = loadConfig();
 
-// ─── Verbose terminal logging ─────────────────────────────────────────────────
+// --- Verbose terminal logging -------------------------------------------------
 const VERBOSE = process.env.MC_VERBOSE === '1';
 const ANSI = { reset:'\x1b[0m', dim:'\x1b[2m', green:'\x1b[32m', amber:'\x1b[33m', red:'\x1b[31m', blue:'\x1b[34m' };
 function verbosePrint(text, type) {
@@ -55,25 +55,50 @@ function verbosePrint(text, type) {
   process.stdout.write(`${ANSI.dim}${time}${ANSI.reset} ${col}${text}${ANSI.reset}\n`);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// --- Helpers ------------------------------------------------------------------
 function broadcast(data) {
   const msg = JSON.stringify(data);
   wss.clients.forEach(ws => { if (ws.readyState === 1) ws.send(msg); });
 }
 
 let _prevCpu = null;
+function readCpuTimes() {
+  try {
+    const stat = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0];
+    const parts = stat.trim().split(/\s+/);
+    if (parts[0] === 'cpu' && parts.length >= 5) {
+      const values = parts.slice(1).map(v => parseInt(v, 10)).filter(Number.isFinite);
+      const idle = (values[3] || 0) + (values[4] || 0);
+      const total = values.reduce((sum, value) => sum + value, 0);
+      if (total > 0) return { idle, total };
+    }
+  } catch {}
+
+  const cpus = os.cpus();
+  let idle = 0;
+  let total = 0;
+  cpus.forEach(cpu => {
+    for (const t in cpu.times) total += cpu.times[t];
+    idle += cpu.times.idle;
+  });
+  return { idle, total };
+}
+
 function updateSystemStats() {
   const totMem = os.totalmem(), freeMem = os.freemem();
-  const cpus = os.cpus();
-  let idle = 0, total = 0;
-  cpus.forEach(cpu => { for (const t in cpu.times) total += cpu.times[t]; idle += cpu.times.idle; });
+  const { idle, total } = readCpuTimes();
   let cpuUsage = 0;
   if (_prevCpu) {
     const dIdle = idle - _prevCpu.idle, dTotal = total - _prevCpu.total;
-    cpuUsage = dTotal > 0 ? Math.round(100 * (1 - dIdle / dTotal)) : 0;
+    cpuUsage = dTotal > 0 ? 100 * (1 - dIdle / dTotal) : 0;
   }
   _prevCpu = { idle, total };
-  systemStats = { cpu: cpuUsage, ram: Math.round((totMem - freeMem) / totMem * 100) };
+  if (cpuUsage < 0) cpuUsage = 0;
+  if (cpuUsage > 100) cpuUsage = 100;
+  systemStats = {
+    cpu: Math.round(cpuUsage * 10) / 10,
+    ram: Math.round((totMem - freeMem) / totMem * 100),
+  };
   broadcast({ type: 'stats', cpu: systemStats.cpu, ram: systemStats.ram });
 }
 
@@ -113,6 +138,26 @@ function getUptime() {
   return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 }
 
+function getNetworkInfo() {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries || []) {
+      if (!entry || entry.internal || entry.family !== 'IPv4') continue;
+      addresses.push(entry.address);
+    }
+  }
+
+  const lanIp = addresses.find(ip =>
+    ip.startsWith('192.168.') ||
+    ip.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
+  ) || addresses[0] || '127.0.0.1';
+
+  return { lanIp, addresses };
+}
+
 function httpsGet(url, depth = 0) {
   return new Promise((resolve, reject) => {
     if (depth > 5) return reject(new Error('Too many redirects'));
@@ -126,7 +171,7 @@ function httpsGet(url, depth = 0) {
   });
 }
 
-// ─── Properties ───────────────────────────────────────────────────────────────
+// --- Properties ---------------------------------------------------------------
 function readProperties() {
   const file = path.join(CONFIG.serverDir, 'server.properties');
   if (!fs.existsSync(file)) return {};
@@ -154,7 +199,7 @@ function writeProperties(props) {
   fs.writeFileSync(file, updated.join('\n'));
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+// --- Routes -------------------------------------------------------------------
 app.use(express.json());
 
 app.get('/api/status', (_, res) => res.json({
@@ -162,6 +207,7 @@ app.get('/api/status', (_, res) => res.json({
   players: Object.values(onlinePlayers),
   jarExists: fs.existsSync(path.join(CONFIG.serverDir, CONFIG.serverJar)),
   download: downloadState,
+  network: getNetworkInfo(),
 }));
 
 app.post('/api/start', (_, res) => {
@@ -180,13 +226,13 @@ app.post('/api/start', (_, res) => {
   mcProcess.stderr.on('data', d => String(d).split('\n').forEach(l => addLog(l, 'warn')));
   mcProcess.on('error', err => addLog(`Process error: ${err.message}`, 'error'));
   mcProcess.on('exit', code => {
-    addLog(`─── Server stopped (exit ${code ?? 'signal'}) ───`, 'system');
+    addLog(`--- Server stopped (exit ${code ?? 'signal'}) ---`, 'system');
     mcProcess = null; onlinePlayers = {}; startTime = null;
     broadcast({ type: 'status', running: false, players: [], uptime: null });
   });
 
   startTime = Date.now();
-  addLog(`─── Starting ${CONFIG.serverJar} (${CONFIG.memory} RAM) ───`, 'system');
+  addLog(`--- Starting ${CONFIG.serverJar} (${CONFIG.memory} RAM) ---`, 'system');
   broadcast({ type: 'status', running: true });
   res.json({ ok: true });
 });
@@ -194,14 +240,14 @@ app.post('/api/start', (_, res) => {
 app.post('/api/stop', (_, res) => {
   if (!mcProcess) return res.json({ error: 'Not running' });
   mcProcess.stdin.write('stop\n');
-  addLog('─── Stop command sent ───', 'system');
+  addLog('--- Stop command sent ---', 'system');
   res.json({ ok: true });
 });
 
 app.post('/api/kill', (_, res) => {
   if (!mcProcess) return res.json({ error: 'Not running' });
   mcProcess.kill('SIGKILL');
-  addLog('─── Force killed ───', 'error');
+  addLog('--- Force killed ---', 'error');
   res.json({ ok: true });
 });
 
@@ -377,7 +423,7 @@ app.post('/api/download', async (req, res) => {
       const instUrl    = `https://maven.fabricmc.net/net/fabricmc/fabric-installer/${instVer}/fabric-installer-${instVer}.jar`;
       const instPath   = path.join(CONFIG.serverDir, `fabric-installer-${instVer}.jar`);
 
-      addLog('─── Downloading Fabric installer... ───', 'system');
+      addLog('--- Downloading Fabric installer... ---', 'system');
       await new Promise((resolve, reject) => {
         const doGetInst = (url, depth = 0) => {
           if (depth > 5) return reject(new Error('Too many redirects'));
@@ -396,7 +442,7 @@ app.post('/api/download', async (req, res) => {
         doGetInst(instUrl);
       });
 
-      addLog('─── Running Fabric installer (this also downloads MC, may take a while)... ───', 'system');
+      addLog('--- Running Fabric installer (this also downloads MC, may take a while)... ---', 'system');
       downloadState.name = `fabric-${version} (installing...)`;
       broadcast({ type: 'download', ...downloadState });
 
@@ -419,7 +465,7 @@ app.post('/api/download', async (req, res) => {
       CONFIG.serverVersion = version;
       saveConfig();
       fs.writeFileSync(path.join(CONFIG.serverDir, 'eula.txt'), 'eula=true\n');
-      addLog(`─── Fabric ${version} ready → fabric-server-launch.jar ───`, 'system');
+      addLog(`--- Fabric ${version} ready ? fabric-server-launch.jar ---`, 'system');
       downloadState.done = true;
       broadcast({ type: 'download', ...downloadState });
       broadcast({ type: 'jarReady' });
@@ -464,7 +510,7 @@ app.post('/api/download', async (req, res) => {
     CONFIG.serverVersion = version;
     saveConfig();
     fs.writeFileSync(path.join(CONFIG.serverDir, 'eula.txt'), 'eula=true\n');
-    addLog(`─── Downloaded ${type} ${version} → server.jar ───`, 'system');
+    addLog(`--- Downloaded ${type} ${version} ? server.jar ---`, 'system');
     downloadState.done = true;
     broadcast({ type: 'download', ...downloadState });
     broadcast({ type: 'jarReady' });
@@ -475,7 +521,7 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// ─── WebSocket ────────────────────────────────────────────────────────────────
+// --- WebSocket ----------------------------------------------------------------
 wss.on('connection', ws => {
   ws.send(JSON.stringify({ type: 'history', logs: logHistory }));
   ws.send(JSON.stringify({ type: 'status', running: !!mcProcess, players: Object.values(onlinePlayers), uptime: getUptime() }));
@@ -490,14 +536,17 @@ wss.on('connection', ws => {
   ws.on('close', () => clearInterval(tick));
 });
 
-// ─── Launch ───────────────────────────────────────────────────────────────────
+// --- Launch -------------------------------------------------------------------
+updateSystemStats();
 setInterval(updateSystemStats, 1000);
 
 server.listen(CONFIG.uiPort, '0.0.0.0', () => {
-  console.log(`\n  🤖 DroidMC  →  http://localhost:${CONFIG.uiPort}\n`);
+  const network = getNetworkInfo();
+  console.log(`\n  DroidMC panel: http://localhost:${CONFIG.uiPort}`);
+  console.log(`  LAN address:   http://${network.lanIp}:${CONFIG.uiPort}\n`);
 });
 
-// ─── HTML ─────────────────────────────────────────────────────────────────────
+// --- HTML ---------------------------------------------------------------------
 
-// ─── Static files ─────────────────────────────────────────────────────────────
+// --- Static files -------------------------------------------------------------
 app.use(express.static(path.join(__dirname, 'public')));
