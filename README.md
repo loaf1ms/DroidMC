@@ -1,114 +1,133 @@
-<img src="image.png" alt="Alt text" width="500" />
+diff --git a/d:\Github project\Droidmc/DroidMC/README.md b/d:\Github project\Droidmc/DroidMC/README.md
+new file mode 100644
+--- /dev/null
++++ b/d:\Github project\Droidmc/DroidMC/README.md
+@@ -0,0 +1,179 @@ +<img src="image.png" alt="DroidMC screenshot" width="500" />
 
-# DroidMC — by loaf1ms and wafflebyte8
-
-Minecraft server panel that runs directly on your Android phone via Termux. Control your server from any browser on the same WiFi.
-
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/u6tE8DzS5V)
-
----
-
-## First, update Termux packages:
-
-```bash
-pkg update && pkg upgrade -y
-```
-
-## Install
-
-Paste this in Termux:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/loaf1ms/DroidMC/main/setup.sh -o setup.sh
-bash setup.sh
-```
-
-The script will walk you through setup and configure everything automatically. It will detect your phone's available RAM and suggest a sensible allocation for the server.
-
-Then start the panel:
-
-```bash
-~/start-mc.sh        # foreground (shows live logs in terminal)
-~/start-mc-bg.sh     # background via tmux (recommended)
-```
-
-Open in your browser: `http://your_phones_ip:8080`  
-Or on the same device: `http://localhost:8080`
-
----
-
-## Update
-
-Just rerun the setup script — it will detect your existing install and ask if you want to reinstall over it. Your world data is never touched.
-
----
-
-## Uninstall
-
-`uninstall.sh` is downloaded automatically during setup:
-
-```bash
-~/uninstall-mc.sh
-```
-
-You'll be asked whether to keep or delete your world data, and given a final confirmation before anything is removed.
-
----
-
-## Features
-
-- **Server control** — Start, stop, force kill
-- **Live console** — Stream logs in real time, send commands
-- **Version manager** — Download Paper, Vanilla, or Fabric directly from official sources
-- **Player management** — Kick, ban, unban, OP, gamemode, teleport, heal, feed
-- **Plugins & Mods** — Upload and delete `.jar` files
-- **Properties editor** — Edit `server.properties` from the browser
-- **System stats** — Live CPU and RAM usage with ring gauges
-- **How to Connect card** — Shows your IP, port, server type and version at a glance
-
----
-
-## Requirements
-
-- Android device running Termux
-- 2-4GB RAM reccomended
-- 4GB+ for a smooth experience
-- Not reccomended going lower than 2GB
-- 500MHZ soc minimum
-- 2GHZ reccomended
-- 2GHZ+ for a smooth experience
-
-The setup script automatically installs OpenJDK 21, Node.js, and tmux.
-
----
-
-## Tips
-
-- Keep your phone **plugged in** while the server runs — Java is heavy on battery
-- Run `termux-wake-lock` (requires Termux:API from F-Droid) to prevent Android from killing the server
-- Use **Paper** over Vanilla or Fabric for much better performance on ARM
-- Set `view-distance=6` in Properties if the server feels slow
-
----
-
-## File Structure
-
-```
-~/DroidMC/
-├── server.js          ← Backend & API
-├── package.json       ← Node dependencies
-├── config.json        ← Saved settings
-├── .version           ← Installed version (used by update/setup scripts)
-├── .backup/           ← Pre-update backup of panel files
-├── node_modules/      ← Installed packages
-└── public/
-    ├── index.html     ← UI layout
-    ├── style.css      ← Styling
-    └── app.js         ← Client-side logic
-```
-
----
-
-## Security
-
-The panel binds to `0.0.0.0` and is accessible on your local network. There is no authentication — do not port forward unless you know what you're doing.
+- +# DroidMC
+- +Minecraft server panel that runs directly on your Android phone through Termux. Control your server from any browser on the same WiFi.
+- +[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/u6tE8DzS5V)
+- +---
+- +## v3.0.0
+- +DroidMC v3 adds authentication, backups and restore, crash recovery, a file manager, validation tools, scheduled tasks, resource presets, and a safer install/update flow with checksum verification.
+- +---
+- +## First, update Termux packages
+- +`bash
++pkg update && pkg upgrade -y
++`
+- +## Install
+- +Paste this in Termux:
+- +`bash
++curl -fsSL https://raw.githubusercontent.com/loaf1ms/DroidMC/main/setup.sh -o setup.sh
++bash setup.sh
++`
+- +The setup script will:
+- +- Download DroidMC into a temporary folder first
+  +- Verify downloaded files with `checksums.sha256`
+  +- Back up panel files before updates
+  +- Ask whether to keep existing config and auth on reinstall
+  +- Prompt you to create the web panel username and password on the phone
+  +- Detect your RAM and suggest a server allocation
+  +- Install Java, Node.js, and optionally tmux
+- +Then start the panel:
+- +`bash
++~/start-mc.sh
++~/start-mc-bg.sh
++`
+- +Open in your browser:
+- +- Same device: `http://localhost:8080`
+  +- Same WiFi: `http://your_phone_ip:8080`
+- +---
+- +## Update
+- +Rerun the setup script:
+- +`bash
++bash setup.sh
++`
+- +The updater preserves world data, can preserve existing config and auth, and creates a backup of current panel files before overwriting them.
+- +---
+- +## Uninstall
+- +`uninstall.sh` is downloaded automatically during setup:
+- +`bash
++~/uninstall-mc.sh
++`
+- +You will be asked whether to keep or delete world data before anything is removed.
+- +---
+- +## New in v3
+- +- Web panel authentication
+  +- Login, logout, and in-panel credential changes
+  +- Crash detection with `crash.log`
+  +- Automatic restart after crashes
+  +- Manual backups, restore, delete, and retention
+  +- Scheduled backups
+  +- Scheduled broadcast messages
+  +- Scheduled daily restarts
+  +- Resource presets
+  +- Offline whitelist, ops, and bans management
+  +- Managed file editor for core server files
+  +- File visibility for plugins, mods, datapacks, and logs
+  +- Validation screen for Java, Node, RAM, auth, tmux, wake-lock, and jar presence
+  +- Safer install/update flow with staged downloads and checksum verification
+- +---
+- +## Features
+- +- **Server control** - Start, stop, restart, and force kill
+  +- **Live console** - Stream logs in real time and send commands
+  +- **Crash recovery** - Detect crashes, write `crash.log`, and restart automatically
+  +- **Backups** - Create, restore, and manage backups from the panel
+  +- **Version manager** - Download Paper, Vanilla, Fabric, Forge, NeoForge, and Quilt
+  +- **Checksum tracking** - Store hashes for downloaded or uploaded files
+  +- **Player management** - Kick, ban, unban, OP, gamemode, teleport, heal, and feed
+  +- **Offline admin tools** - Manage whitelist, operators, and bans without the server running
+  +- **Plugins and mods** - Upload and delete `.jar` files
+  +- **File manager** - Read and edit key files like `server.properties`, `ops.json`, and logs
+  +- **Properties editor** - Edit `server.properties` from the browser
+  +- **System stats** - Live CPU, RAM, and disk usage
+  +- **Validation tools** - Check runtime health and install prerequisites
+  +- **How to connect** - See IP, port, server type, and version
+- +---
+- +## Requirements
+- +- Android device running Termux
+  +- 2 GB RAM minimum recommended
+  +- 4 GB or more for a smoother experience
+  +- Enough storage for Java, server files, worlds, and backups
+- +The setup script installs:
+- +- OpenJDK 21
+  +- Node.js
+  +- curl
+  +- tmux (optional)
+- +---
+- +## Tips
+- +- Keep your phone plugged in while the server runs
+  +- Use `termux-wake-lock` to reduce Android background kills
+  +- Use Paper over Vanilla when possible for better ARM performance
+  +- Lower `view-distance` and `simulation-distance` on weaker devices
+  +- Use the validation tab after setup to confirm Java, auth, tmux, and jar status
+- +---
+- +## File structure
+- +```text
+  +~/DroidMC/
+  +├── server.js # Backend and API
+  +├── package.json # Node dependencies
+  +├── package-lock.json # Locked dependency versions
+  +├── config.json # Panel and server settings
+  +├── auth.json # Panel login credentials
+  +├── integrity.json # Saved file hashes
+  +├── .checksums # Installer checksum manifest
+  +├── .version # Installed DroidMC version
+  +├── .backup/ # Backups of previous panel files
+  +├── backups/ # Server backups created from the panel
+  +├── node_modules/
+  +└── public/
+- ├── index.html
+- ├── style.css
+- └── app.js
+  +```
+- +---
+- +## Security
+- +- The panel binds to `0.0.0.0` so devices on your local network can reach it
+  +- Authentication is enabled in v3 and created during setup
+  +- Do not port-forward the panel unless you know exactly what you are doing
+  +- Session login is browser-based and currently stored in memory by the panel process
+- +---
+- +## Notes
+- +- If you change distributed files, regenerate `checksums.sha256` before release
+  +- If checksum verification fails after a release, verify LF line endings and push all changed files together
