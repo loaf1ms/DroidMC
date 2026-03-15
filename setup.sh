@@ -70,11 +70,14 @@ done
 
 if command -v sha256sum >/dev/null 2>&1; then
   info "Verifying downloads..."
-  (
+  if (
     cd "$TMP_DIR"
-    sha256sum -c checksums.sha256
-  ) || err "Checksum verification failed"
-  log "Downloads verified"
+    sha256sum -c checksums.sha256 >/dev/null
+  ); then
+    log "Downloads verified"
+  else
+    warn "Checksum verification failed. Continuing install with unverified files."
+  fi
 else
   warn "sha256sum not found, skipping checksum verification"
 fi
@@ -114,9 +117,14 @@ fi
 step "Installing packages"
 
 pkg update -y 2>/dev/null || warn "pkg update reported warnings"
-pkg install -y openjdk-21 nodejs curl openssl >/dev/null || err "Failed to install Java / Node.js / curl / openssl"
+pkg install -y openjdk-21 nodejs curl openssl || err "Failed to install Java / Node.js / curl / openssl"
 log "Java ready: $(java -version 2>&1 | head -1)"
 log "Node.js $(node --version) / npm $(npm --version)"
+if command -v openssl >/dev/null 2>&1; then
+  log "OpenSSL ready: $(openssl version | head -1)"
+else
+  warn "OpenSSL is not available. HTTPS certificate generation will be skipped."
+fi
 
 echo ""
 echo -e "  ${A}Android 12+ may kill background processes.${N}"
@@ -213,13 +221,22 @@ log "Panel files copied to $UI_DIR"
 
 if [ "$KEEP_CONFIG" -eq 0 ]; then
   if [ "$ENABLE_HTTPS" -eq 1 ]; then
-    mkdir -p "$HTTPS_CERT_DIR"
-    openssl req -x509 -nodes -newkey rsa:2048 \
-      -keyout "$HTTPS_KEY_PATH" \
-      -out "$HTTPS_CERT_PATH" \
-      -days 3650 \
-      -subj "/CN=DroidMC" >/dev/null 2>&1 || err "Failed to generate HTTPS certificate"
-    log "Self-signed HTTPS certificate generated"
+    if ! command -v openssl >/dev/null 2>&1; then
+      warn "OpenSSL is not installed. Continuing with HTTP instead of HTTPS."
+      ENABLE_HTTPS=0
+    else
+      mkdir -p "$HTTPS_CERT_DIR"
+      if openssl req -x509 -nodes -newkey rsa:2048 \
+        -keyout "$HTTPS_KEY_PATH" \
+        -out "$HTTPS_CERT_PATH" \
+        -days 3650 \
+        -subj "/CN=DroidMC"; then
+        log "Self-signed HTTPS certificate generated"
+      else
+        warn "Failed to generate HTTPS certificate. Continuing with HTTP instead of HTTPS."
+        ENABLE_HTTPS=0
+      fi
+    fi
   fi
   cat > "$UI_DIR/config.json" <<EOF
 {
