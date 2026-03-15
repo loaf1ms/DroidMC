@@ -117,7 +117,7 @@ fi
 step "Installing packages"
 
 pkg update -y 2>/dev/null || warn "pkg update reported warnings"
-pkg install -y openjdk-21 nodejs curl openssl || err "Failed to install Java / Node.js / curl / openssl"
+pkg install -y openjdk-21 nodejs curl openssl-tool || err "Failed to install Java / Node.js / curl / openssl"
 log "Java ready: $(java -version 2>&1 | head -1)"
 log "Node.js $(node --version) / npm $(npm --version)"
 if command -v openssl >/dev/null 2>&1; then
