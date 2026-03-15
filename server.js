@@ -336,6 +336,9 @@ function commandExists(command) {
 }
 
 function broadcast(message) {
+  if (!wss || !wss.clients) {
+    return;
+  }
   const payload = JSON.stringify(message);
   wss.clients.forEach((socket) => {
     if (socket.readyState === 1) {
