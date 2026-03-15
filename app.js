@@ -1,681 +1,951 @@
-let ws,isRunning=false,curF='all',allLogs=[],players=[],selT='paper',propsData={},networkInfo={lanIp:'',addresses:[]},configState={memory:'1G',serverDir:''},lastStats={cpu:0,ram:0,diskUsed:0,diskTotal:0};
+const state = {
+  ws: null,
+  reconnectTimer: null,
+  bootstrapped: false,
+  filter: 'all',
+  logs: [],
+  players: [],
+  config: {},
+  props: {},
+  stats: { cpu: 0, ram: 0, diskUsed: 0, diskTotal: 0 },
+  network: { lanIp: '', mcPort: '25565', panelPort: '8080' },
+  download: null,
+  selectedVersionType: 'paper',
+  selectedFileKey: 'server.properties',
+  selectedFileEditable: false,
+  backups: [],
+  managedFiles: [],
+  folders: { plugins: [], mods: [], datapacks: [], logs: [] },
+  admin: { whitelist: [], ops: [], bans: [] },
+  validation: null,
+  presets: {},
+  integrity: {},
+};
 
-async function readJsonResponse(r){
-  const text=await r.text();
-  let data={};
-  try{data=text?JSON.parse(text):{};}catch{
-    throw new Error(`Request failed (${r.status} ${r.statusText})`);
+async function api(path, options = {}) {
+  const init = { ...options, headers: { ...(options.headers || {}) } };
+  if (init.body && typeof init.body !== 'string') {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(init.body);
   }
-  if(!r.ok)throw new Error(data.error||`Request failed (${r.status} ${r.statusText})`);
+
+  const response = await fetch(path, init);
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (response.status === 401) {
+    showLogin(true, 'Authentication required');
+    throw new Error(data.error || 'Authentication required');
+  }
+  if (!response.ok || data.error) {
+    throw new Error(data.error || `Request failed (${response.status})`);
+  }
   return data;
 }
 
-function connect(){
-  const p=location.protocol==='https:'?'wss':'ws';
-  ws=new WebSocket(p+'://'+location.host);
-  ws.onmessage=e=>handle(JSON.parse(e.data));
-  ws.onclose=()=>setTimeout(connect,2000);
+function $(id) {
+  return document.getElementById(id);
 }
 
-function handle(m){
-  if(m.type==='history'){allLogs=[];document.getElementById('console').innerHTML='';m.logs.forEach(l=>alog(l,true));}
-  else if(m.type==='log') alog(m);
-  else if(m.type==='status'){setR(m.running);if(m.players!=null)setPl(m.players);if(m.uptime!=null)setUp(m.uptime);}
-  else if(m.type==='players') setPl(m.players);
-  else if(m.type==='uptime')  setUp(m.uptime);
-  else if(m.type==='config')  apCfg(m.config);
-  else if(m.type==='stats'){lastStats={...lastStats,...m};updStats(m);}
-  else if(m.type==='download') updDl(m);
-  else if(m.type==='jarReady'){toast('Download done! Ready to start.','ok');loadVI();}
+function esc(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-function alog(e,s=false){
-  allLogs.push(e);
-  if(allLogs.length>2000)allLogs.shift();
-  if(curF!=='all'&&e.type!==curF)return;
-  rlog(e);
+function fmtBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
 }
 
-function rlog(e){
-  const c=document.getElementById('console');
-  const d=document.createElement('div');d.className='ll '+(e.type||'log');d.dataset.type=e.type||'log';
-  const t=document.createElement('span');t.className='lt';t.textContent=e.time||'';
-  const m=document.createElement('span');m.className='lm';m.textContent=e.text;
-  d.append(t,m);c.appendChild(d);
-  const a=document.getElementById('asc');
-  if(a&&a.checked)c.scrollTop=c.scrollHeight;
+function parseMemoryToMB(value) {
+  const match = String(value || '').trim().toUpperCase().match(/^(\d+(?:\.\d+)?)([KMGTP])?B?$/);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  const unit = match[2] || 'M';
+  const mult = { K: 1 / 1024, M: 1, G: 1024, T: 1048576, P: 1073741824 }[unit] || 1;
+  return amount * mult;
 }
 
-function setF(f){
-  curF=f;
-  document.querySelectorAll('.fchip').forEach(c=>c.classList.toggle('on',c.dataset.f===f));
-  const c=document.getElementById('console');c.innerHTML='';
-  allLogs.forEach(l=>{if(f==='all'||l.type===f)rlog(l);});
+function getMemoryLimitMB() {
+  return parseMemoryToMB($('sRam')?.value || state.config.memory || '');
 }
 
-function clrConsole(){document.getElementById('console').innerHTML='';allLogs=[];}
-
-async function sendCmd2(){
-  const i=document.getElementById('cmdi');const cmd=i.value.trim();if(!cmd)return;i.value='';
-  const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
-  const d=await r.json();if(d.error)toast(d.error,'err');
+function toast(message, type = 'ok') {
+  const node = $('toast');
+  node.textContent = message;
+  node.className = `show ${type}`;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => {
+    node.className = '';
+  }, 2600);
 }
 
-async function srvAct(a){
-  const r=await fetch('/api/'+a,{method:'POST'});const d=await r.json();
-  if(d.error)toast(d.error,'err');
-  else toast(a==='start'?'Starting...':a==='restart'?'Restarting...':'Stopping...','ok');
-}
-
-async function killSrv(){
-  if(!confirm('Force kill? World may not save!'))return;
-  const r=await fetch('/api/kill',{method:'POST'});const d=await r.json();
-  toast(d.error||'Killed',d.error?'err':'ok');
-}
-
-async function sc(cmd){
-  if(!isRunning){toast('Server not running','err');return;}
-  const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:cmd})});
-  const d=await r.json();if(d.error)toast(d.error,'err');else toast('/'+cmd,'ok');
-}
-
-function setR(r){
-  isRunning=r;
-  // New status badge
-  const badge=document.getElementById('statusBadge');
-  const badgeTxt=document.getElementById('badgeTxt');
-  if(badge){badge.className='status-badge '+(r?'running':'stopped');badgeTxt.textContent=r?'RUNNING':'STOPPED';}
-  // Status text in stat card
-  const ds=document.getElementById('dStatus');
-  if(ds){ds.textContent=r?'Currently running':'Not currently running';}
-  const dup=document.getElementById('dUp');
-  if(dup&&!r){dup.textContent='Offline';dup.className='stat-value dim';}
-  // Buttons
-  const bStart=document.getElementById('btnStart');
-  const bRestart=document.getElementById('btnRestart');
-  const bStopTop=document.getElementById('btnStopTop');
-  const bKillTop=document.getElementById('btnKillTop');
-  const bStartMain=document.getElementById('btnStartMain');
-  const bStop=document.getElementById('btnStop');
-  const bKill=document.getElementById('btnKill');
-  if(bStart)bStart.disabled=r;
-  if(bRestart)bRestart.disabled=!r;
-  if(bStopTop)bStopTop.disabled=!r;
-  if(bKillTop)bKillTop.disabled=!r;
-  if(bStartMain)bStartMain.disabled=r;
-  if(bStop)bStop.disabled=!r;
-  if(bKill)bKill.disabled=!r;
-  document.getElementById('cmdi').disabled=!r;
-  document.getElementById('bSend').disabled=!r;
-  if(!r){setUp(null);setPl([]);updStats({...lastStats,cpu:0,ram:0});}
-}
-
-function setPl(list){
-  players=list||[];const n=players.length;
-  document.getElementById('tPl').textContent=n;
-  document.getElementById('plCount').textContent=n+' online';
-  const nb=document.getElementById('nbPl');
-  let b=nb.querySelector('.bdg');
-  if(n>0){if(!b){b=document.createElement('div');b.className='bdg';nb.appendChild(b);}b.textContent=n>9?'9+':n;}
-  else if(b)b.remove();
-  const chips=document.getElementById('plChips');
-  if(chips)chips.innerHTML=players.map(p=>`<span class="pchip">${esc(p.name)}</span>`).join('');
-  renderPl();
-}
-
-function setUp(u){
-  const v=u||'─';
-  document.getElementById('tUp').textContent=v;
-  const dup=document.getElementById('dUp');
-  if(dup){
-    dup.textContent=u||'Offline';
-    dup.className=u?'stat-value':'stat-value dim';
+function showLogin(show, note = '') {
+  $('loginGate').classList.toggle('visible', show);
+  $('loginNote').textContent = note;
+  if (show) {
+    if (state.ws) {
+      state.ws.close();
+      state.ws = null;
+    }
   }
-  const ds=document.getElementById('dStatus');
-  if(ds&&!u)ds.textContent='Not currently running';
 }
 
-function parseMemoryToMB(value){
-  const match=String(value||'').trim().toUpperCase().match(/^(\d+(?:\.\d+)?)([KMGTP])?B?$/);
-  if(!match)return 0;
-  const amount=Number(match[1]);
-  const unit=match[2]||'M';
-  const mult={K:1/1024,M:1,G:1024,T:1048576,P:1073741824}[unit]||1;
-  return amount*mult;
+async function checkAuth() {
+  const status = await fetch('/api/auth/status').then((res) => res.json());
+  $('authUser').textContent = status.username || 'guest';
+  $('authUsername').value = status.username || '';
+  if (status.authenticated) {
+    showLogin(false);
+    if (status.bootstrap) {
+      toast('Bootstrap credentials are still active. Change them in Settings.', 'info');
+    }
+    return true;
+  }
+  showLogin(true);
+  return false;
 }
 
-function getMemoryLimitMB(){
-  const input=document.getElementById('sRam');
-  const raw=(input&&input.value.trim())||configState.memory||'';
-  return parseMemoryToMB(raw);
+async function login(event) {
+  event.preventDefault();
+  const username = $('loginUsername').value.trim();
+  const password = $('loginPassword').value;
+  try {
+    const result = await api('/api/auth/login', { method: 'POST', body: { username, password } });
+    $('authUser').textContent = result.username;
+    $('authUsername').value = result.username;
+    $('loginPassword').value = '';
+    showLogin(false);
+    await bootstrap();
+  } catch (error) {
+    $('loginNote').textContent = error.message;
+  }
 }
 
-function updStats(s){
-  // s.cpu = process CPU % (from pidusage), s.ram = process RAM in MB (from pidusage)
-  const cpu=Number(s.cpu)||0;
-  const ramMB=Number(s.ram)||0;  // now MB from pidusage
-  const ramLimitMB=getMemoryLimitMB();
-  const ramPct=ramLimitMB>0?Math.min(ramMB/ramLimitMB*100,100):0;
-  const diskUsed=Number(s.diskUsed)||0;
-  const diskTotal=Number(s.diskTotal)||0;
-  const diskPct=diskTotal>0?Math.min(diskUsed/diskTotal*100,100):0;
-  const cpuCol=cpu>70?'var(--red)':cpu>40?'var(--amber)':'var(--green)';
-  const ramCol=ramPct>80?'var(--red)':ramPct>60?'var(--amber)':'var(--green)';
-  const diskCol=diskPct>90?'var(--red)':diskPct>75?'var(--amber)':'var(--blue)';
-  const cpuTxt=cpu%1===0?cpu.toFixed(0):cpu.toFixed(1);
-  const ramTxt=ramMB>=1024?(ramMB/1024).toFixed(1)+' GB':ramMB.toFixed(0)+' MB';
-  const ramLimitTxt=ramLimitMB>0?fmtB(ramLimitMB*1024*1024):'â”€';
-  // Top stat cards
-  const cpuEl=document.getElementById('dCpu');
-  const ramEl=document.getElementById('dRam');
-  const diskEl=document.getElementById('dDisk');
-  if(cpuEl){cpuEl.textContent=cpuTxt+'%';cpuEl.style.color=cpuCol;}
-  if(ramEl){ramEl.textContent=ramTxt;ramEl.style.color=ramCol;}
-  if(diskEl){diskEl.textContent=fmtB(diskUsed);diskEl.style.color=diskCol;}
-  document.getElementById('tCpu').textContent=cpuTxt+'%';
-  document.getElementById('tRam').textContent=ramTxt;
-  // Stat card bars
-  const cpuBar=document.getElementById('cpuBar');
-  const ramBar=document.getElementById('ramBar');
-  const diskBar=document.getElementById('diskBar');
-  if(cpuBar){cpuBar.style.width=Math.min(cpu/2,100)+'%';cpuBar.style.background=cpuCol;}
-  if(ramBar){ramBar.style.width=ramPct+'%';ramBar.style.background=ramCol;}
-  if(diskBar){diskBar.style.width=diskPct+'%';diskBar.style.background=diskCol;}
-  // Sub labels
-  const cpuSub=document.getElementById('cpuSub');
-  const ramSub=document.getElementById('ramSub');
-  const diskSub=document.getElementById('diskSub');
-  if(cpuSub)cpuSub.textContent='of 200% max';
-  if(ramSub)ramSub.textContent=ramLimitMB>0?'of '+ramLimitTxt+' ('+ramPct.toFixed(1)+'%)':'Memory limit unavailable';
-  if(diskSub)diskSub.textContent=diskTotal>0?'of '+fmtB(diskTotal)+' ('+diskPct.toFixed(1)+'%)':'Storage unavailable';
+async function logout() {
+  try {
+    await api('/api/auth/logout', { method: 'POST' });
+  } catch {
+    // Ignore logout failures.
+  }
+  $('authUser').textContent = 'guest';
+  showLogin(true, 'Logged out');
 }
 
-function apCfg(c){
-  if(!c)return;
-  configState={...configState,...c};
-  document.getElementById('sRam').value=c.memory||'';
-  document.getElementById('sJar').value=c.serverJar||'';
-  document.getElementById('sDir').value=c.serverDir||'';
-  document.getElementById('sJava').value=c.javaPath||'';
-  document.getElementById('iJar').textContent=c.serverJar||'─';
-  document.getElementById('iDir').textContent=c.serverDir||'─';
-  const ciType=document.getElementById('ciType');
-  const ciVer=document.getElementById('ciVer');
-  if(ciType&&c.serverType)ciType.textContent=c.serverType.charAt(0).toUpperCase()+c.serverType.slice(1);
-  if(ciVer&&c.serverVersion)ciVer.textContent=c.serverVersion;
-  updStats(lastStats);
+function connectSocket() {
+  if (state.ws) return;
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  state.ws = new WebSocket(`${protocol}://${location.host}`);
+  state.ws.onmessage = (event) => handleSocket(JSON.parse(event.data));
+  state.ws.onclose = (event) => {
+    state.ws = null;
+    if (event.code === 4001) {
+      showLogin(true, 'Session expired');
+      return;
+    }
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = setTimeout(() => {
+      if (!$('loginGate').classList.contains('visible')) connectSocket();
+    }, 2000);
+  };
 }
 
-function apNetwork(network,config){
-  networkInfo=network||{lanIp:'',addresses:[]};
-  const port=(config&&config.uiPort)||location.port||'8080';
-  const lanIp=networkInfo.lanIp||location.hostname||'127.0.0.1';
-  document.getElementById('aLAN').textContent=`${lanIp}:${port}`;
-  document.getElementById('ciIP').textContent=lanIp;
+function handleSocket(message) {
+  if (message.type === 'history') {
+    state.logs = message.logs || [];
+    renderLogs();
+    return;
+  }
+  if (message.type === 'log') {
+    state.logs.push(message);
+    if (state.logs.length > 3000) state.logs.shift();
+    appendLog(message);
+    return;
+  }
+  if (message.type === 'status') {
+    applyStatus(message);
+    return;
+  }
+  if (message.type === 'players') {
+    state.players = message.players || [];
+    renderPlayers();
+    return;
+  }
+  if (message.type === 'uptime') {
+    updateUptime(message.uptime);
+    return;
+  }
+  if (message.type === 'config') {
+    applyConfig(message.config);
+    return;
+  }
+  if (message.type === 'stats') {
+    state.stats = { ...state.stats, ...message };
+    updateStats();
+    return;
+  }
+  if (message.type === 'download') {
+    state.download = message;
+    renderDownload();
+    return;
+  }
+  if (message.type === 'jarReady') {
+    toast('Server software is ready.', 'ok');
+    loadStatus();
+  }
 }
 
-// ─ Players ─
-function renderPl(){
-  const el=document.getElementById('plList');
-  if(!players.length){el.innerHTML='<div class="empty"><span class="empty-i">👥</span>No players online</div>';return;}
-  el.innerHTML=players.map(p=>`
+function applyStatus(status) {
+  state.players = status.players || [];
+  state.network = status.network || state.network;
+  state.download = status.download || state.download;
+  state.pendingRestart = status.pendingRestart || null;
+  state.lastCrash = status.lastCrash || null;
+
+  const running = !!status.running;
+  $('statusBadge').className = `status-badge ${running ? 'running' : 'stopped'}`;
+  $('badgeTxt').textContent = running ? 'RUNNING' : 'STOPPED';
+  $('btnStart').disabled = running;
+  $('btnStopTop').disabled = !running;
+  $('btnRestart').disabled = !running;
+  $('btnKillTop').disabled = !running;
+  $('cmdi').disabled = !running;
+  $('sendCmdBtn').disabled = !running;
+  $('dStatus').textContent = running ? 'Currently running' : 'Not currently running';
+  updateUptime(status.uptime);
+  renderPlayers();
+  renderHealth(status);
+  applyConfig(status.config || state.config);
+  applyNetwork(status.network || state.network);
+}
+
+function applyConfig(config) {
+  if (!config) return;
+  state.config = { ...state.config, ...config };
+  $('sRam').value = state.config.memory || '';
+  $('sJar').value = state.config.serverJar || '';
+  $('sDir').value = state.config.serverDir || '';
+  $('sJava').value = state.config.javaPath || '';
+  $('authUsername').value = $('authUser').textContent === 'guest' ? (state.config.authUsername || '') : $('authUser').textContent;
+  $('autoRestart').checked = !!state.config.autoRestart;
+  $('autoRestartDelay').value = state.config.autoRestartDelaySec ?? 10;
+  $('backupRetention').value = state.config.backupRetention ?? 5;
+  $('schedBackup').value = state.config.scheduleBackupMinutes ?? 0;
+  $('schedBroadcast').value = state.config.scheduleBroadcastMinutes ?? 0;
+  $('schedMessage').value = state.config.scheduleBroadcastMessage || '';
+  $('schedRestart').value = state.config.scheduleRestartTime || '';
+  $('cfgType').textContent = state.config.serverType || '-';
+  $('cfgVersion').textContent = state.config.serverVersion || '-';
+  $('cfgJava').textContent = state.validation?.javaVersion || '-';
+  $('ciType').textContent = state.config.serverType || '-';
+  $('ciVer').textContent = state.config.serverVersion || '-';
+  $('iJar').textContent = state.config.serverJar || '-';
+  $('iDir').textContent = state.config.serverDir || '-';
+  updateStats();
+}
+
+function applyNetwork(network) {
+  if (!network) return;
+  state.network = { ...state.network, ...network };
+  $('serverAddr').textContent = `${state.network.lanIp || 'localhost'}:${state.network.panelPort || location.port || 8080}`;
+  $('ciIP').textContent = state.network.lanIp || location.hostname;
+  $('ciPort').textContent = state.network.mcPort || '25565';
+  $('panelLAN').textContent = `http://${state.network.lanIp || location.hostname}:${state.network.panelPort || location.port || 8080}`;
+  $('aLAN').textContent = `${state.network.lanIp || location.hostname}:${state.network.mcPort || '25565'}`;
+}
+
+function updateUptime(uptime) {
+  $('tUp').textContent = uptime || '-';
+  $('dUp').textContent = uptime || 'Offline';
+  $('dUp').className = uptime ? 'stat-value' : 'stat-value dim';
+}
+
+function updateStats() {
+  const cpu = Number(state.stats.cpu) || 0;
+  const ramMB = Number(state.stats.ram) || 0;
+  const ramLimitMB = getMemoryLimitMB();
+  const ramPct = ramLimitMB > 0 ? Math.min((ramMB / ramLimitMB) * 100, 100) : 0;
+  const diskUsed = Number(state.stats.diskUsed) || 0;
+  const diskTotal = Number(state.stats.diskTotal) || 0;
+  const diskPct = diskTotal > 0 ? Math.min((diskUsed / diskTotal) * 100, 100) : 0;
+  const cpuColor = cpu > 70 ? 'var(--red)' : cpu > 40 ? 'var(--amber)' : 'var(--green)';
+  const ramColor = ramPct > 80 ? 'var(--red)' : ramPct > 60 ? 'var(--amber)' : 'var(--green)';
+  const diskColor = diskPct > 90 ? 'var(--red)' : diskPct > 75 ? 'var(--amber)' : 'var(--blue)';
+  $('tCpu').textContent = `${cpu.toFixed(cpu % 1 ? 1 : 0)}%`;
+  $('tRam').textContent = ramMB >= 1024 ? `${(ramMB / 1024).toFixed(1)}G` : `${Math.round(ramMB)}M`;
+  $('dCpu').textContent = `${cpu.toFixed(cpu % 1 ? 1 : 0)}%`;
+  $('dRam').textContent = ramMB >= 1024 ? `${(ramMB / 1024).toFixed(1)} GB` : `${Math.round(ramMB)} MB`;
+  $('dDisk').textContent = fmtBytes(diskUsed);
+  $('cpuSub').textContent = 'of 200% max';
+  $('ramSub').textContent = ramLimitMB > 0 ? `of ${fmtBytes(ramLimitMB * 1024 * 1024)} (${ramPct.toFixed(1)}%)` : 'Memory limit unavailable';
+  $('diskSub').textContent = diskTotal > 0 ? `of ${fmtBytes(diskTotal)} (${diskPct.toFixed(1)}%)` : 'Storage unavailable';
+  $('cpuBar').style.width = `${Math.min(cpu / 2, 100)}%`;
+  $('ramBar').style.width = `${ramPct}%`;
+  $('diskBar').style.width = `${diskPct}%`;
+  $('dCpu').style.color = cpuColor;
+  $('dRam').style.color = ramColor;
+  $('dDisk').style.color = diskColor;
+  $('cpuBar').style.background = cpuColor;
+  $('ramBar').style.background = ramColor;
+  $('diskBar').style.background = diskColor;
+}
+
+function renderHealth(status = {}) {
+  const pending = status.pendingRestart || state.pendingRestart;
+  const lastCrash = status.lastCrash || state.lastCrash;
+  $('healthCrash').textContent = lastCrash?.lastCrashAt
+    ? `${lastCrash.lastCrashReason || 'Crash'} at ${lastCrash.lastCrashAt}`
+    : 'No crash recorded';
+  $('healthRestart').textContent = pending
+    ? `${pending.reason} at ${pending.eta}`
+    : 'No restart pending';
+  $('healthBackups').textContent = `${status.backupCount ?? state.backups.length} backups`;
+  $('healthChecksum').textContent = state.config.lastDownloadedChecksum
+    ? `${state.config.lastDownloadedChecksumType || 'sha256'} ${state.config.lastDownloadedChecksum}`
+    : 'No server jar checksum yet';
+  $('jarChecksum').textContent = state.config.lastDownloadedChecksum
+    ? `${state.config.lastDownloadedChecksumType || 'sha256'} ${state.config.lastDownloadedChecksum}`
+    : 'No checksum recorded';
+  $('iEx').textContent = status.jarExists ? 'Yes' : 'No';
+}
+
+function renderLogs() {
+  $('console').innerHTML = '';
+  state.logs.forEach((entry) => appendLog(entry, true));
+}
+
+function appendLog(entry, force = false) {
+  if (!force && state.filter !== 'all' && entry.type !== state.filter) return;
+  const row = document.createElement('div');
+  row.className = `ll ${entry.type || 'log'}`;
+  row.innerHTML = `<span class="lt">${esc(entry.time || '')}</span><span class="lm">${esc(entry.text || '')}</span>`;
+  $('console').appendChild(row);
+  if ($('autoScroll').checked) {
+    $('console').scrollTop = $('console').scrollHeight;
+  }
+}
+
+function setFilter(filter) {
+  state.filter = filter;
+  document.querySelectorAll('[data-filter]').forEach((node) => {
+    node.classList.toggle('on', node.dataset.filter === filter);
+  });
+  renderLogs();
+}
+
+function renderPlayers() {
+  $('tPl').textContent = String(state.players.length);
+  $('plCount').textContent = `${state.players.length} online`;
+  if (!state.players.length) {
+    $('plList').innerHTML = '<div class="empty">No players online</div>';
+    return;
+  }
+  $('plList').innerHTML = state.players.map((player) => `
     <div class="prow">
-      <div class="pavatar"><img src="https://crafatar.com/avatars/${esc(p.name)}?size=34&overlay=true" alt="${esc(p.name)}" onerror="this.outerHTML='🧑'"></div>
-      <div><div class="pname">${esc(p.name)}</div><div class="ptime">● Online</div></div>
+      <div class="propinfo">
+        <div class="propname">${esc(player.name)}</div>
+        <div class="propkey">Online now</div>
+      </div>
       <div class="pacts">
-        <button class="abtn primary sm" onclick="plAct('op','${esc(p.name)}')">⭐ OP</button>
-        <button class="abtn ghost sm" onclick="plAct('creative','${esc(p.name)}')">🎨</button>
-        <button class="abtn ghost sm" onclick="plAct('survival','${esc(p.name)}')">⚔️</button>
-        <button class="abtn ghost sm" onclick="plAct('spectator','${esc(p.name)}')">👁</button>
-        <button class="abtn ghost sm" onclick="plAct('heal','${esc(p.name)}')">❤️</button>
-        <button class="abtn ghost sm" onclick="plAct('feed','${esc(p.name)}')">🍖</button>
-        <button class="abtn ghost sm" onclick="openTp('${esc(p.name)}')">📍 TP</button>
-        <button class="abtn danger sm" onclick="openKick('${esc(p.name)}')">👢 Kick</button>
-        <button class="abtn danger sm" onclick="openBan('${esc(p.name)}')">🔨 Ban</button>
+        <button class="abtn ghost sm" data-player-action="op" data-player-name="${esc(player.name)}">OP</button>
+        <button class="abtn ghost sm" data-player-action="heal" data-player-name="${esc(player.name)}">Heal</button>
+        <button class="abtn ghost sm" data-player-action="feed" data-player-name="${esc(player.name)}">Feed</button>
+        <button class="abtn danger sm" data-player-action="kick" data-player-name="${esc(player.name)}">Kick</button>
+        <button class="abtn danger sm" data-player-action="ban" data-player-name="${esc(player.name)}">Ban</button>
       </div>
     </div>
   `).join('');
 }
 
-async function plAct(a,name){
-  if(!isRunning){toast('Server not running','err');return;}
-  const r=await fetch('/api/player/'+a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
-  const d=await r.json();toast(d.error||(a+' → '+name),d.error?'err':'ok');
-}
-
-function refreshPl(){if(!isRunning){toast('Not running','err');return;}sc('list');toast('Refreshed','info');}
-
-function openKick(n){openM('Kick '+n,'Kick reason','Reason',async v=>{
-  const r=await fetch('/api/player/kick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,extra:v||'Kicked'})});
-  const d=await r.json();toast(d.error||'Kicked '+n,d.error?'err':'ok');
-},'Kicked by admin');}
-
-function openBan(n){openM('Ban '+n,'Ban reason','Reason',async v=>{
-  const r=await fetch('/api/player/ban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,extra:v||'Banned'})});
-  const d=await r.json();toast(d.error||'Banned '+n,d.error?'err':'ok');
-},'Rule violation');}
-
-function openTp(n){openM('Teleport '+n,'x y z coordinates or player name','Destination',async v=>{
-  if(!v){toast('Enter destination','err');return;}
-  await sc('tp '+n+' '+v);toast('Teleporting '+n,'ok');
-});}
-
-function openBcast(){openM('Broadcast','Message all players','Message',async v=>{
-  if(!v)return;await sc('broadcast '+v);toast('Broadcast sent','ok');
-});}
-
-function getOffPlName(){
-  const input=document.getElementById('offPl');
-  if(!input){toast('Offline player input is unavailable','err');return '';}
-  return input.value.trim();
-}
-
-function offAct(a){
-  const n=getOffPlName();
-  if(!n){toast('Enter a username first','err');return;}
-  if(!isRunning){toast('Server not running','err');return;}
-  const cmd=a==='unban'?'pardon':a;
-  sc(cmd+' '+n);
-}
-
-function offAct2(a,prompt){
-  const n=getOffPlName();
-  if(!n){toast('Enter a username first','err');return;}
-  if(!isRunning){toast('Server not running','err');return;}
-  if(prompt){
-    openM(a+' '+n,prompt,'Value',async v=>{
-      const value=(v||'').trim();
-      if(!value){toast('Enter a value first','err');return;}
-      sc(a+' '+n+' '+value);
-    });
-  } else {
-    sc(a+' '+n);
-  }
-}
-
-function offKick(){
-  const n=getOffPlName();
-  if(!n){toast('Enter a username first','err');return;}
-  if(!isRunning){toast('Server not running','err');return;}
-  openM('Kick '+n,'Kick reason (optional)','Reason',async v=>{
-    const r=await fetch('/api/player/kick',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,extra:v||'Kicked by admin'})});
-    const d=await r.json();toast(d.error||'Kicked '+n,d.error?'err':'ok');
-  },'Kicked by admin');
-}
-
-function offBan(){
-  const n=getOffPlName();
-  if(!n){toast('Enter a username first','err');return;}
-  if(!isRunning){toast('Server not running','err');return;}
-  openM('Ban '+n,'Ban reason','Reason',async v=>{
-    const r=await fetch('/api/player/ban',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,extra:v||'Banned by admin'})});
-    const d=await r.json();toast(d.error||'Banned '+n,d.error?'err':'ok');
-  },'Rule violation');
-}
-
-function offPardon(){
-  const n=getOffPlName();
-  if(!n){toast('Enter a username first','err');return;}
-  if(!isRunning){toast('Server not running','err');return;}
-  sc('pardon '+n);toast('Pardon sent for '+n,'ok');
-}
-
-// ─ Version ─
-function selType(t){
-  selT=t;
-  document.querySelectorAll('.vtb').forEach(b=>b.classList.toggle('active',b.dataset.type===t));
-  loadVerList();
-}
-
-async function loadVerList(){
-  const sel=document.getElementById('verSel');
-  sel.innerHTML='<option>Loading...</option>';
-  try{
-    const r=await fetch('/api/versions/'+selT);const d=await r.json();
-    if(d.error)throw new Error(d.error);
-    sel.innerHTML=d.versions.slice(0,50).map(v=>`<option>${v}</option>`).join('');
-  }catch(e){sel.innerHTML='<option>Error: '+e.message+'</option>';}
-}
-
-async function dlVer(){
-  const ver=document.getElementById('verSel').value;
-  if(!ver||ver.includes('Loading')||ver.includes('Error')){toast('Pick a version','err');return;}
-  const sameType=(configState.serverType||'')===selT;
-  const sameVersion=(configState.serverVersion||'')===ver;
-  let force=false;
-  if(sameType&&sameVersion){
-    force=confirm(`You already have ${selT} ${ver}. Redownload it?`);
-    if(!force)return;
-  }
-  document.getElementById('bDl').disabled=true;
-  const prog=document.getElementById('dlProg');prog.classList.add('vis');
-  document.getElementById('pbf').style.width='0';document.getElementById('pbf').className='pbfill';
-  document.getElementById('dlPct').textContent='0%';
-  document.getElementById('dlName').textContent='Downloading '+selT+' '+ver+'...';
-  document.getElementById('dlSub').textContent='';
-  const r=await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:selT,version:ver,force})});
-  const d=await r.json();
-  if(d.needsConfirm){
-    document.getElementById('bDl').disabled=false;
-    document.getElementById('dlProg').classList.remove('vis');
+function renderAdminList(type) {
+  const targetId = type === 'whitelist' ? 'whitelistList' : type === 'ops' ? 'opsList' : 'bansList';
+  const entries = state.admin[type] || [];
+  if (!entries.length) {
+    $(targetId).innerHTML = '<div class="empty">No entries</div>';
     return;
   }
-  if(d.error){toast(d.error,'err');document.getElementById('bDl').disabled=false;}
-}
-
-function updDl(d){
-  document.getElementById('dlProg').classList.add('vis');
-  const pct=d.total>0?Math.round(d.progress/d.total*100):0;
-  const b=document.getElementById('pbf');
-  document.getElementById('dlPct').textContent=pct+'%';
-  document.getElementById('dlName').textContent=d.name||'Downloading...';
-  b.style.width=pct+'%';
-  if(d.total>0) document.getElementById('dlSub').textContent=fmtB(d.progress)+' / '+fmtB(d.total);
-  if(d.done){b.className='pbfill done';document.getElementById('dlPct').textContent='100%';document.getElementById('dlSub').textContent='Complete!';document.getElementById('bDl').disabled=false;}
-  if(d.error){b.className='pbfill err';document.getElementById('dlSub').textContent='Error: '+d.error;document.getElementById('bDl').disabled=false;}
-}
-
-function fmtB(b){if(b>1048576)return(b/1048576).toFixed(1)+' MB';if(b>1024)return(b/1024).toFixed(0)+' KB';return b+' B';}
-
-async function loadVI(){
-  const r=await fetch('/api/status');const d=await r.json();
-  const ex=document.getElementById('iEx');
-  ex.textContent=d.jarExists?'✅ Yes':'❌ No';
-  ex.style.color=d.jarExists?'var(--green)':'var(--red)';
-  setR(d.running);setPl(d.players);setUp(d.uptime);apCfg(d.config);apNetwork(d.network,d.config);
-}
-
-// ─ Properties ─
-const PDEF={'max-players':'20','gamemode':'survival','difficulty':'easy','level-name':'world','level-type':'minecraft:default','level-seed':'','server-port':'25565','online-mode':'true','white-list':'false','view-distance':'10','simulation-distance':'10','max-tick-time':'60000','network-compression-threshold':'256','pvp':'true','spawn-monsters':'true','spawn-animals':'true','spawn-npcs':'true','allow-nether':'true','allow-flight':'false','generate-structures':'true','spawn-protection':'16','enable-command-block':'false','force-gamemode':'false','hardcore':'false','enable-rcon':'false','rcon.port':'25575','enable-query':'false'};
-const PMETA={
-  'max-players':         {l:'Max Players',       g:'General',t:'number'},
-  'gamemode':            {l:'Default Gamemode',  g:'General',t:'sel',o:['survival','creative','adventure','spectator']},
-  'difficulty':          {l:'Difficulty',        g:'General',t:'sel',o:['peaceful','easy','normal','hard']},
-  'level-name':          {l:'World Name',        g:'General'},
-  'level-type':          {l:'World Type',        g:'General',t:'sel',o:['minecraft:default','minecraft:flat','minecraft:large_biomes','minecraft:amplified']},
-  'level-seed':          {l:'Seed',              g:'General'},
-  'server-port':         {l:'Port',              g:'Network',t:'number'},
-  'online-mode':         {l:'Online Mode',       g:'Network',t:'bool'},
-  'white-list':          {l:'Whitelist',         g:'Network',t:'bool'},
-  'view-distance':       {l:'View Distance',     g:'Performance',t:'number'},
-  'simulation-distance': {l:'Simulation Distance',g:'Performance',t:'number'},
-  'max-tick-time':       {l:'Max Tick Time (ms)',g:'Performance',t:'number'},
-  'network-compression-threshold':{l:'Compression Threshold',g:'Performance',t:'number'},
-  'pvp':                 {l:'PvP',               g:'World',t:'bool'},
-  'spawn-monsters':      {l:'Spawn Monsters',    g:'World',t:'bool'},
-  'spawn-animals':       {l:'Spawn Animals',     g:'World',t:'bool'},
-  'spawn-npcs':          {l:'Spawn Villagers',   g:'World',t:'bool'},
-  'allow-nether':        {l:'Allow Nether',      g:'World',t:'bool'},
-  'allow-flight':        {l:'Allow Flight',      g:'World',t:'bool'},
-  'generate-structures': {l:'Generate Structures',g:'World',t:'bool'},
-  'spawn-protection':    {l:'Spawn Protection',  g:'World',t:'number'},
-  'enable-command-block':{l:'Command Blocks',    g:'World',t:'bool'},
-  'force-gamemode':      {l:'Force Gamemode',    g:'Rules',t:'bool'},
-  'hardcore':            {l:'Hardcore',          g:'Rules',t:'bool'},
-  'enable-rcon':         {l:'RCON',              g:'Advanced',t:'bool'},
-  'rcon.port':           {l:'RCON Port',         g:'Advanced',t:'number'},
-  'enable-query':        {l:'Query',             g:'Advanced',t:'bool'},
-};
-
-async function loadProps(){
-  const r=await fetch('/api/properties');propsData=await r.json();
-  renderP(propsData,'');
-}
-
-function renderP(data,srch){
-  const grps={};
-  for(const[k,m]of Object.entries(PMETA)){
-    const v=data[k]!==undefined?data[k]:(m.t==='bool'?'false':'');
-    if(srch&&!k.includes(srch.toLowerCase())&&!m.l.toLowerCase().includes(srch.toLowerCase()))continue;
-    if(!grps[m.g])grps[m.g]=[];
-    grps[m.g].push({k,m,v});
-  }
-  const other=[];
-  for(const[k,v]of Object.entries(data)){
-    if(!PMETA[k]){if(srch&&!k.includes(srch.toLowerCase()))continue;other.push({k,v});}
-  }
-  let html='';
-  for(const[g,props]of Object.entries(grps)){
-    html+=`<div class="pgrp"><div class="pgtitle">${g}</div>`;
-    for(const{k,m,v}of props){
-      let inp='';
-      if(m.t==='bool'){
-        inp=`<select class="pinput pnarrow" data-key="${k}">
-          <option value="true" ${v==='true'?'selected':''}>true</option>
-          <option value="false" ${v!=='true'?'selected':''}>false</option>
-        </select>`;
-      }else if(m.t==='sel'){
-        inp=`<select class="pinput" data-key="${k}">${m.o.map(o=>`<option ${v===o?'selected':''}>${o}</option>`).join('')}</select>`;
-      }else{
-        const def=PDEF[k]!==undefined?` placeholder="${esc(PDEF[k])} (default)"`:'';
-        inp=`<input class="pinput" data-key="${k}" type="${m.t||'text'}" value="${esc(v)}"${def}>`;
-      }
-      html+=`<div class="proprow"><div class="propinfo"><div class="propname">${m.l}</div><div class="propkey">${k}</div></div>${inp}</div>`;
-    }
-    html+=`</div>`;
-  }
-  if(other.length){
-    html+=`<div class="pgrp"><div class="pgtitle">Other</div>`;
-    for(const{k,v}of other)
-      html+=`<div class="proprow"><div class="propinfo"><div class="propname">${k}</div></div><input class="pinput" data-key="${k}" value="${esc(v)}"></div>`;
-    html+=`</div>`;
-  }
-  if(!html)html='<div class="empty"><span class="empty-i">🔍</span>No properties found</div>';
-  document.getElementById('propsBox').innerHTML=html;
-}
-
-function fProps(q){renderP(propsData,q);}
-
-async function saveProps(){
-  const updated={};
-  document.querySelectorAll('[data-key]').forEach(el=>updated[el.dataset.key]=el.value);
-  const r=await fetch('/api/properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(updated)});
-  const d=await r.json();toast(d.error||'Saved! Restart server to apply.','ok');
-}
-
-// ─ Mods ─
-async function loadMods(){
-  const r=await fetch('/api/mods');const d=await r.json();
-  document.getElementById('modCount').textContent=(d.mods?.length||0)+' mods';
-  const el=document.getElementById('modList');
-  if(!d.mods?.length){el.innerHTML='<div class="empty"><span class="empty-i">🧩</span>No mods in mods/ folder</div>';return;}
-  el.innerHTML=d.mods.map(m=>`
-    <div class="plrow">
-      <span style="font-size:20px">🧩</span>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(m.name)}</div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--td)">${fmtB(m.size)}</div></div>
-      <button class="abtn danger sm" onclick="delMod('${esc(m.name)}')">🗑 Delete</button>
+  $(targetId).innerHTML = entries.map((entry) => `
+    <div class="list-row">
+      <div class="propinfo">
+        <div class="propname">${esc(entry.name)}</div>
+        <div class="propkey">${esc(entry.uuid || entry.reason || '')}</div>
+      </div>
+      <button class="abtn danger sm" data-admin-remove="${type}" data-admin-name="${esc(entry.name)}">Remove</button>
     </div>
   `).join('');
 }
 
-async function delMod(n){
-  if(!confirm('Delete '+n+'?'))return;
-  const r=await fetch('/api/mods/'+encodeURIComponent(n),{method:'DELETE'});
-  const d=await r.json();toast(d.error||'Deleted',d.error?'err':'ok');
-  if(!d.error)loadMods();
+function renderBackups() {
+  $('healthBackups').textContent = `${state.backups.length} backups`;
+  $('backupMeta').textContent = `Retention: ${state.config.backupRetention ?? 5} backups. Scheduled backup every ${state.config.scheduleBackupMinutes || 0} minutes.`;
+  if (!state.backups.length) {
+    $('backupList').innerHTML = '<div class="empty">No backups yet</div>';
+    return;
+  }
+  $('backupList').innerHTML = state.backups.map((backup) => `
+    <div class="list-row">
+      <div class="propinfo">
+        <div class="propname">${esc(backup.label || backup.id)}</div>
+        <div class="propkey">${esc(backup.createdAt)} | ${fmtBytes(backup.size)}</div>
+      </div>
+      <div class="filter-row">
+        <button class="abtn ghost sm" data-restore-backup="${esc(backup.id)}">Restore</button>
+        <button class="abtn danger sm" data-delete-backup="${esc(backup.id)}">Delete</button>
+      </div>
+    </div>
+  `).join('');
 }
 
-async function uploadMod(){
-  const fi=document.getElementById('modFile');
-  if(!fi||!fi.files[0]){toast('Select a mod file','err');return;}
-  const f=fi.files[0];
-  if(!f.name.endsWith('.jar')){toast('Only .jar files allowed','err');return;}
-  if(f.size>500*1024*1024){toast('File too large (max 500MB)','err');return;}
-  
-  const st=document.getElementById('upStatus');
-  if(!st){toast('UI error','err');return;}
-  st.style.display='block';st.textContent='Reading file...';
-  
-  const reader=new FileReader();
-  reader.onload=async e=>{
-    try{
-      const b64=e.target.result.split(',')[1];
-      st.textContent='Uploading '+f.name+'...';
-      const r=await fetch('/api/mods/upload',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({filename:f.name,data:b64})
+function renderFiles() {
+  if (!state.managedFiles.length) {
+    $('fileList').innerHTML = '<div class="empty">No managed files</div>';
+  } else {
+    $('fileList').innerHTML = state.managedFiles.map((file) => `
+      <button class="file-item ${state.selectedFileKey === file.key ? 'active' : ''}" data-file-key="${esc(file.key)}">
+        <span>${esc(file.label)}</span>
+        <span class="propkey">${file.exists ? fmtBytes(file.size) : 'missing'}</span>
+      </button>
+    `).join('');
+  }
+
+  const renderFolderRows = (items, empty) => items.length
+    ? items.map((item) => `<div class="list-row compact"><span>${esc(item.name)}</span><span class="propkey">${item.sha256 ? item.sha256.slice(0, 12) : fmtBytes(item.size)}</span></div>`).join('')
+    : `<div class="empty">${empty}</div>`;
+
+  $('pluginsFolderList').innerHTML = renderFolderRows(state.folders.plugins, 'No plugins');
+  $('modsFolderList').innerHTML = renderFolderRows(state.folders.mods, 'No mods');
+  $('extraFolderList').innerHTML = `
+    <div class="propkey" style="margin-bottom: 8px">Datapacks</div>
+    ${renderFolderRows(state.folders.datapacks, 'No datapacks')}
+    <div class="propkey" style="margin: 12px 0 8px">Logs</div>
+    ${renderFolderRows(state.folders.logs, 'No log files')}
+  `;
+}
+
+function renderDownload() {
+  if (!state.download) return;
+  $('dlProg').classList.add('vis');
+  const total = Number(state.download.total) || 0;
+  const progress = Number(state.download.progress) || 0;
+  const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
+  $('dlName').textContent = state.download.name || 'Downloading...';
+  $('dlPct').textContent = `${state.download.done ? 100 : pct}%`;
+  $('pbf').style.width = `${state.download.done ? 100 : pct}%`;
+  $('pbf').className = `pbfill${state.download.error ? ' err' : state.download.done ? ' done' : ''}`;
+  $('dlSub').textContent = state.download.error
+    ? `Error: ${state.download.error}`
+    : state.download.done
+      ? `Complete${state.download.checksum ? ` | sha256 ${state.download.checksum}` : ''}`
+      : `${fmtBytes(progress)} / ${fmtBytes(total)}`;
+}
+
+function renderValidation() {
+  if (!state.validation) return;
+  $('valJava').textContent = state.validation.javaVersion || '-';
+  $('valNode').textContent = state.validation.nodeVersion || '-';
+  $('valRam').textContent = `${state.validation.totalRamMB || 0} MB`;
+  $('cfgJava').textContent = state.validation.javaVersion || '-';
+  $('validationSummary').innerHTML = `
+    <div class="list-row compact"><span>Suggested RAM</span><span>${state.validation.suggestedRamMB || 0} MB</span></div>
+    <div class="list-row compact"><span>Configured RAM</span><span>${state.validation.configuredRamMB || 0} MB</span></div>
+    <div class="list-row compact"><span>Backups</span><span>${state.validation.backupCount || 0}</span></div>
+    <div class="list-row compact"><span>Last crash</span><span>${state.validation.lastCrash?.lastCrashAt || 'none'}</span></div>
+  `;
+  $('validationList').innerHTML = (state.validation.checks || []).map((check) => `
+    <div class="list-row">
+      <div class="propinfo">
+        <div class="propname">${esc(check.label)}</div>
+        <div class="propkey">${esc(check.detail)}</div>
+      </div>
+      <span class="check-pill ${check.ok ? 'ok' : 'bad'}">${check.ok ? 'OK' : 'WARN'}</span>
+    </div>
+  `).join('');
+}
+
+function renderPresets() {
+  const entries = Object.entries(state.presets || {});
+  if (!entries.length) {
+    $('presetList').innerHTML = '<div class="empty">No presets available</div>';
+    return;
+  }
+  $('presetList').innerHTML = entries.map(([key, preset]) => `
+    <div class="list-row">
+      <div class="propinfo">
+        <div class="propname">${esc(preset.label)}</div>
+        <div class="propkey">${esc(preset.description)} | ${esc(preset.memory)}</div>
+      </div>
+      <button class="abtn ${state.config.preset === key ? 'primary' : 'ghost'} sm" data-preset="${esc(key)}">${state.config.preset === key ? 'Applied' : 'Apply'}</button>
+    </div>
+  `).join('');
+}
+
+function setTab(name) {
+  document.querySelectorAll('.tnav').forEach((node) => {
+    node.classList.toggle('active', node.dataset.tabTarget === name);
+  });
+  document.querySelectorAll('.tab').forEach((node) => {
+    node.classList.toggle('active', node.id === `tab-${name}`);
+  });
+}
+
+async function sendCommand(command) {
+  if (!command.trim()) return;
+  await api('/api/command', { method: 'POST', body: { command } });
+}
+
+async function serverAction(action) {
+  const result = await api(`/api/${action}`, { method: 'POST' });
+  toast(result.ok ? `${action} requested` : 'Done', 'ok');
+}
+
+async function saveSettings() {
+  const config = await api('/api/config', {
+    method: 'POST',
+    body: {
+      memory: $('sRam').value.trim(),
+      serverJar: $('sJar').value.trim(),
+      serverDir: $('sDir').value.trim(),
+      javaPath: $('sJava').value.trim(),
+      autoRestart: $('autoRestart').checked,
+      autoRestartDelaySec: $('autoRestartDelay').value.trim(),
+      backupRetention: $('backupRetention').value.trim(),
+      scheduleBackupMinutes: $('schedBackup').value.trim(),
+      scheduleBroadcastMinutes: $('schedBroadcast').value.trim(),
+      scheduleBroadcastMessage: $('schedMessage').value,
+      scheduleRestartTime: $('schedRestart').value.trim(),
+    },
+  });
+  applyConfig(config.config);
+  renderBackups();
+  toast('Settings saved', 'ok');
+}
+
+async function saveAuth() {
+  const username = $('authUsername').value.trim();
+  const currentPassword = $('authCurrentPassword').value;
+  const newPassword = $('authNewPassword').value;
+  const result = await api('/api/auth/change', {
+    method: 'POST',
+    body: { username, currentPassword, newPassword },
+  });
+  $('authUser').textContent = result.username;
+  $('authCurrentPassword').value = '';
+  $('authNewPassword').value = '';
+  toast('Credentials updated', 'ok');
+}
+
+async function loadStatus() {
+  const status = await api('/api/status');
+  applyStatus(status);
+}
+
+async function loadValidation() {
+  state.validation = await api('/api/validation');
+  renderValidation();
+}
+
+async function loadIntegrity() {
+  state.integrity = await api('/api/integrity');
+}
+
+async function loadBackups() {
+  const data = await api('/api/backups');
+  state.backups = data.backups || [];
+  renderBackups();
+}
+
+async function loadFiles() {
+  const data = await api('/api/files');
+  state.managedFiles = data.files || [];
+  state.folders = data.directories || state.folders;
+  renderFiles();
+  if (state.managedFiles.some((file) => file.key === state.selectedFileKey)) {
+    await openManagedFile(state.selectedFileKey);
+  } else if (state.managedFiles[0]) {
+    await openManagedFile(state.managedFiles[0].key);
+  }
+}
+
+async function openManagedFile(key) {
+  const result = await api(`/api/files/read?key=${encodeURIComponent(key)}`);
+  state.selectedFileKey = result.key;
+  state.selectedFileEditable = !!result.editable;
+  $('fileTitle').textContent = result.label;
+  $('fileChecksum').textContent = result.sha256 ? `Checksum: ${result.sha256}` : 'Checksum: -';
+  $('fileEditor').value = result.content || '';
+  $('fileEditor').disabled = !result.editable;
+  $('saveFileBtn').disabled = !result.editable;
+  renderFiles();
+}
+
+async function loadAdminLists() {
+  const [whitelist, ops, bans] = await Promise.all([
+    api('/api/admin/whitelist'),
+    api('/api/admin/ops'),
+    api('/api/admin/bans'),
+  ]);
+  state.admin.whitelist = whitelist.entries || [];
+  state.admin.ops = ops.entries || [];
+  state.admin.bans = bans.entries || [];
+  renderAdminList('whitelist');
+  renderAdminList('ops');
+  renderAdminList('bans');
+}
+
+async function loadMods() {
+  const data = await api('/api/mods');
+  const mods = data.mods || [];
+  $('modCount').textContent = `${mods.length} mods`;
+  $('modList').innerHTML = mods.length
+    ? mods.map((item) => `<div class="list-row"><div class="propinfo"><div class="propname">${esc(item.name)}</div><div class="propkey">${fmtBytes(item.size)}${item.sha256 ? ` | ${item.sha256.slice(0, 12)}` : ''}</div></div><button class="abtn danger sm" data-delete-mod="${esc(item.name)}">Delete</button></div>`).join('')
+    : '<div class="empty">No mods</div>';
+}
+
+async function loadPlugins() {
+  const data = await api('/api/plugins');
+  const plugins = data.plugins || [];
+  $('plgCount').textContent = `${plugins.length} plugins`;
+  $('plgList').innerHTML = plugins.length
+    ? plugins.map((item) => `<div class="list-row"><div class="propinfo"><div class="propname">${esc(item.name)}</div><div class="propkey">${fmtBytes(item.size)}${item.sha256 ? ` | ${item.sha256.slice(0, 12)}` : ''}</div></div><button class="abtn danger sm" data-delete-plugin="${esc(item.name)}">Delete</button></div>`).join('')
+    : '<div class="empty">No plugins</div>';
+}
+
+async function loadVersionList() {
+  const data = await api(`/api/versions/${state.selectedVersionType}`);
+  $('verSel').innerHTML = (data.versions || []).slice(0, 100).map((version) => `<option>${esc(version)}</option>`).join('');
+}
+
+async function loadProperties() {
+  state.props = await api('/api/properties');
+  $('motdInput').value = state.props.motd || state.config.motd || '';
+  $('motdPreview').textContent = state.props.motd || state.config.motd || '';
+  renderProperties(state.props, $('psrch').value.trim());
+}
+
+function renderProperties(data, search = '') {
+  const groups = {};
+  Object.entries(PMETA).forEach(([key, meta]) => {
+    const value = data[key] ?? (meta.t === 'bool' ? 'false' : '');
+    if (search && !key.includes(search.toLowerCase()) && !meta.l.toLowerCase().includes(search.toLowerCase())) return;
+    groups[meta.g] = groups[meta.g] || [];
+    groups[meta.g].push({ key, meta, value });
+  });
+
+  const other = Object.entries(data)
+    .filter(([key]) => !PMETA[key] && (!search || key.includes(search.toLowerCase())))
+    .map(([key, value]) => ({ key, value }));
+
+  let html = '';
+  Object.entries(groups).forEach(([group, props]) => {
+    html += `<div class="pgrp"><div class="pgtitle">${esc(group)}</div>`;
+    props.forEach(({ key, meta, value }) => {
+      let input = '';
+      if (meta.t === 'bool') {
+        input = `<select class="pinput pnarrow" data-key="${esc(key)}"><option value="true" ${value === 'true' ? 'selected' : ''}>true</option><option value="false" ${value !== 'true' ? 'selected' : ''}>false</option></select>`;
+      } else if (meta.t === 'sel') {
+        input = `<select class="pinput" data-key="${esc(key)}">${meta.o.map((option) => `<option ${value === option ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
+      } else {
+        input = `<input class="pinput" data-key="${esc(key)}" type="${meta.t || 'text'}" value="${esc(value)}" />`;
+      }
+      html += `<div class="proprow"><div class="propinfo"><div class="propname">${esc(meta.l)}</div><div class="propkey">${esc(key)}</div></div>${input}</div>`;
+    });
+    html += '</div>';
+  });
+
+  if (other.length) {
+    html += '<div class="pgrp"><div class="pgtitle">Other</div>';
+    other.forEach(({ key, value }) => {
+      html += `<div class="proprow"><div class="propinfo"><div class="propname">${esc(key)}</div></div><input class="pinput" data-key="${esc(key)}" value="${esc(value)}" /></div>`;
+    });
+    html += '</div>';
+  }
+
+  $('propsBox').innerHTML = html || '<div class="empty">No properties found</div>';
+}
+
+async function saveProperties() {
+  const payload = {};
+  document.querySelectorAll('[data-key]').forEach((node) => {
+    payload[node.dataset.key] = node.value;
+  });
+  await api('/api/properties', { method: 'POST', body: payload });
+  toast('Properties saved. Restart if needed.', 'ok');
+}
+
+async function saveMotd() {
+  await api('/api/properties', { method: 'POST', body: { motd: $('motdInput').value } });
+  $('motdPreview').textContent = $('motdInput').value || '';
+  toast('MOTD saved', 'ok');
+}
+
+async function createBackup() {
+  await api('/api/backups/create', { method: 'POST', body: { label: $('backupLabel').value.trim() } });
+  $('backupLabel').value = '';
+  await loadBackups();
+  toast('Backup created', 'ok');
+}
+
+async function restoreBackup(id) {
+  await api(`/api/backups/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+  await Promise.all([loadBackups(), loadFiles(), loadProperties(), loadStatus()]);
+  toast('Backup restored', 'ok');
+}
+
+async function deleteBackup(id) {
+  await api(`/api/backups/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await loadBackups();
+  toast('Backup deleted', 'ok');
+}
+
+async function addAdmin(type) {
+  const map = { whitelist: 'whitelistName', ops: 'opName', bans: 'banName' };
+  const input = $(map[type]);
+  const name = input.value.trim();
+  if (!name) throw new Error('Enter a username');
+  const body = type === 'bans' ? { name, reason: 'Banned by admin' } : { name };
+  await api(`/api/admin/${type}`, { method: 'POST', body });
+  input.value = '';
+  await loadAdminLists();
+  toast('Entry added', 'ok');
+}
+
+async function removeAdmin(type, name) {
+  await api(`/api/admin/${type}/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  await loadAdminLists();
+  toast('Entry removed', 'ok');
+}
+
+async function uploadJar(kind) {
+  const fileInput = kind === 'mods' ? $('modFile') : $('plgFile');
+  const label = kind === 'mods' ? $('modUploadStatus') : $('plgUploadStatus');
+  if (!fileInput.files[0]) throw new Error('Select a file first');
+  const file = fileInput.files[0];
+  label.textContent = 'Reading file...';
+  const reader = new FileReader();
+  await new Promise((resolve, reject) => {
+    reader.onload = () => resolve();
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  label.textContent = `Uploading ${file.name}...`;
+  const data = String(reader.result).split(',')[1];
+  await api(`/api/${kind}/upload`, { method: 'POST', body: { filename: file.name, data } });
+  label.textContent = 'Upload complete';
+  fileInput.value = '';
+  if (kind === 'mods') {
+    $('modFileName').textContent = 'No file selected';
+    $('uploadModBtn').disabled = true;
+    await loadMods();
+  } else {
+    $('plgFileName').textContent = 'No file selected';
+    $('uploadPlgBtn').disabled = true;
+    await loadPlugins();
+  }
+  await loadFiles();
+}
+
+async function bootstrap() {
+  if (!state.bootstrapped) {
+    connectSocket();
+    state.bootstrapped = true;
+  } else if (!state.ws) {
+    connectSocket();
+  }
+
+  await Promise.all([
+    loadStatus(),
+    loadValidation(),
+    loadIntegrity(),
+    loadBackups(),
+    loadFiles(),
+    loadAdminLists(),
+    loadMods(),
+    loadPlugins(),
+    loadVersionList(),
+    loadProperties(),
+    api('/api/presets').then((data) => { state.presets = data.presets || {}; renderPresets(); }),
+  ]);
+}
+
+function openPrompt(title, body, label, value = '') {
+  return new Promise((resolve) => {
+    $('modalTitle').textContent = title;
+    $('modalBody').textContent = body;
+    $('modalInputs').innerHTML = `<div class="minput"><label>${esc(label)}</label><input class="inp" id="modalInput" value="${esc(value)}" /></div>`;
+    $('modal').classList.add('open');
+    const cleanup = (result) => {
+      $('modal').classList.remove('open');
+      $('modalConfirmBtn').onclick = null;
+      $('modalCancelBtn').onclick = null;
+      resolve(result);
+    };
+    $('modalConfirmBtn').onclick = () => cleanup($('modalInput').value);
+    $('modalCancelBtn').onclick = () => cleanup(null);
+  });
+}
+
+function bindEvents() {
+  $('loginForm').addEventListener('submit', login);
+  $('logoutBtn').addEventListener('click', logout);
+  $('btnStart').addEventListener('click', () => serverAction('start').catch((error) => toast(error.message, 'err')));
+  $('btnStopTop').addEventListener('click', () => serverAction('stop').catch((error) => toast(error.message, 'err')));
+  $('btnRestart').addEventListener('click', () => serverAction('restart').catch((error) => toast(error.message, 'err')));
+  $('btnKillTop').addEventListener('click', () => serverAction('kill').catch((error) => toast(error.message, 'err')));
+  $('sendCmdBtn').addEventListener('click', () => sendCommand($('cmdi').value).then(() => { $('cmdi').value = ''; }).catch((error) => toast(error.message, 'err')));
+  $('cmdi').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') $('sendCmdBtn').click();
+  });
+  $('clearConsoleBtn').addEventListener('click', () => { state.logs = []; renderLogs(); });
+  document.querySelectorAll('[data-tab-target]').forEach((node) => node.addEventListener('click', () => setTab(node.dataset.tabTarget)));
+  document.querySelectorAll('[data-filter]').forEach((node) => node.addEventListener('click', () => setFilter(node.dataset.filter)));
+  document.querySelectorAll('[data-command]').forEach((node) => node.addEventListener('click', () => sendCommand(node.dataset.command).catch((error) => toast(error.message, 'err'))));
+  $('broadcastBtn').addEventListener('click', async () => {
+    const value = await openPrompt('Broadcast', 'Send a message to all players.', 'Message');
+    if (value) sendCommand(`say ${value}`).catch((error) => toast(error.message, 'err'));
+  });
+  $('saveSettingsBtn').addEventListener('click', () => saveSettings().catch((error) => toast(error.message, 'err')));
+  $('saveAuthBtn').addEventListener('click', () => saveAuth().catch((error) => toast(error.message, 'err')));
+  $('saveMotdBtn').addEventListener('click', () => saveMotd().catch((error) => toast(error.message, 'err')));
+  $('savePropsBtn').addEventListener('click', () => saveProperties().catch((error) => toast(error.message, 'err')));
+  $('createBackupBtn').addEventListener('click', () => createBackup().catch((error) => toast(error.message, 'err')));
+  $('saveFileBtn').addEventListener('click', async () => {
+    await api('/api/files/write', { method: 'POST', body: { key: state.selectedFileKey, content: $('fileEditor').value } });
+    await loadFiles();
+    toast('File saved', 'ok');
+  });
+  $('downloadBtn').addEventListener('click', async () => {
+    const version = $('verSel').value;
+    const request = async (force = false) => {
+      const response = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: state.selectedVersionType, version, force }),
       });
-      const d=await readJsonResponse(r);
-      if(d.error){
-        toast(d.error,'err');st.textContent='Error: '+d.error;
-      }else{
-        toast('Mod uploaded!','ok');
-        st.textContent='✅ Uploaded successfully';
-        fi.value='';document.getElementById('modFileName').textContent='No file selected';document.getElementById('bUpMod').disabled=true;
-        setTimeout(()=>{st.style.display='none';loadMods();},1500);
+      const data = await response.json();
+      if (response.status === 401) {
+        showLogin(true, 'Authentication required');
+        throw new Error('Authentication required');
       }
-    }catch(e){
-      toast(e.message,'err');st.textContent='Error: '+e.message;
+      if (data.needsConfirm) {
+        const confirmed = window.confirm(data.error);
+        if (confirmed) {
+          await request(true);
+        }
+        return;
+      }
+      if (!response.ok || data.error) {
+        throw new Error(data.error || `Request failed (${response.status})`);
+      }
+      toast('Download started', 'ok');
+    };
+    await request(false);
+  });
+  $('reloadModsBtn').addEventListener('click', () => loadMods().catch((error) => toast(error.message, 'err')));
+  $('reloadPluginsBtn').addEventListener('click', () => loadPlugins().catch((error) => toast(error.message, 'err')));
+  $('refreshPlayersBtn').addEventListener('click', () => api('/api/list', { method: 'POST' }).catch((error) => toast(error.message, 'err')));
+  $('pickModBtn').addEventListener('click', () => $('modFile').click());
+  $('pickPlgBtn').addEventListener('click', () => $('plgFile').click());
+  $('modFile').addEventListener('change', () => {
+    $('modFileName').textContent = $('modFile').files[0]?.name || 'No file selected';
+    $('uploadModBtn').disabled = !$('modFile').files[0];
+  });
+  $('plgFile').addEventListener('change', () => {
+    $('plgFileName').textContent = $('plgFile').files[0]?.name || 'No file selected';
+    $('uploadPlgBtn').disabled = !$('plgFile').files[0];
+  });
+  $('uploadModBtn').addEventListener('click', () => uploadJar('mods').catch((error) => toast(error.message, 'err')));
+  $('uploadPlgBtn').addEventListener('click', () => uploadJar('plugins').catch((error) => toast(error.message, 'err')));
+  $('addWhitelistBtn').addEventListener('click', () => addAdmin('whitelist').catch((error) => toast(error.message, 'err')));
+  $('addOpBtn').addEventListener('click', () => addAdmin('ops').catch((error) => toast(error.message, 'err')));
+  $('addBanBtn').addEventListener('click', () => addAdmin('bans').catch((error) => toast(error.message, 'err')));
+  $('psrch').addEventListener('input', () => renderProperties(state.props, $('psrch').value.trim()));
+  document.body.addEventListener('click', async (event) => {
+    const target = event.target.closest('[data-player-action],[data-admin-remove],[data-restore-backup],[data-delete-backup],[data-file-key],[data-delete-mod],[data-delete-plugin],[data-preset],[data-version-type]');
+    if (!target) return;
+    try {
+      if (target.dataset.playerAction) {
+        const action = target.dataset.playerAction;
+        const name = target.dataset.playerName;
+        const extra = action === 'kick' || action === 'ban'
+          ? await openPrompt(action === 'kick' ? 'Kick Player' : 'Ban Player', `Enter a reason for ${name}.`, 'Reason', action === 'kick' ? 'Kicked by admin' : 'Banned by admin')
+          : null;
+        if (extra === null && (action === 'kick' || action === 'ban')) return;
+        await api(`/api/player/${action}`, { method: 'POST', body: { name, extra } });
+        toast(`${action} sent`, 'ok');
+      } else if (target.dataset.adminRemove) {
+        await removeAdmin(target.dataset.adminRemove, target.dataset.adminName);
+      } else if (target.dataset.restoreBackup) {
+        await restoreBackup(target.dataset.restoreBackup);
+      } else if (target.dataset.deleteBackup) {
+        await deleteBackup(target.dataset.deleteBackup);
+      } else if (target.dataset.fileKey) {
+        await openManagedFile(target.dataset.fileKey);
+      } else if (target.dataset.deleteMod) {
+        await api(`/api/mods/${encodeURIComponent(target.dataset.deleteMod)}`, { method: 'DELETE' });
+        await Promise.all([loadMods(), loadFiles()]);
+      } else if (target.dataset.deletePlugin) {
+        await api(`/api/plugins/${encodeURIComponent(target.dataset.deletePlugin)}`, { method: 'DELETE' });
+        await Promise.all([loadPlugins(), loadFiles()]);
+      } else if (target.dataset.preset) {
+        await api(`/api/presets/${target.dataset.preset}`, { method: 'POST' });
+        await Promise.all([loadStatus(), loadProperties(), api('/api/presets').then((data) => { state.presets = data.presets || {}; renderPresets(); })]);
+        toast('Preset applied', 'ok');
+      } else if (target.dataset.versionType) {
+        state.selectedVersionType = target.dataset.versionType;
+        document.querySelectorAll('[data-version-type]').forEach((node) => node.classList.toggle('active', node.dataset.versionType === state.selectedVersionType));
+        await loadVersionList();
+      }
+    } catch (error) {
+      toast(error.message, 'err');
     }
-  };
-  reader.onerror=()=>{toast('Failed to read file','err');st.style.display='none';};
-  reader.readAsDataURL(f);
-}
-
-// ─ Plugins ─
-async function uploadPlg(){
-  const fi=document.getElementById('plgFile');
-  if(!fi||!fi.files[0]){toast('Select a plugin file','err');return;}
-  const f=fi.files[0];
-  if(!f.name.endsWith('.jar')){toast('Only .jar files allowed','err');return;}
-  if(f.size>500*1024*1024){toast('File too large (max 500MB)','err');return;}
-  const st=document.getElementById('upPlgStatus');
-  st.style.display='block';st.textContent='Reading file...';
-  const reader=new FileReader();
-  reader.onload=async e=>{
-    try{
-      st.textContent='Uploading '+f.name+'...';
-      const r=await fetch('/api/plugins/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:f.name,data:e.target.result.split(',')[1]})});
-      const d=await readJsonResponse(r);
-      if(d.error){toast(d.error,'err');st.textContent='Error: '+d.error;}
-      else{toast('Plugin uploaded!','ok');st.textContent='\u2705 Uploaded';fi.value='';document.getElementById('plgFileName').textContent='No file selected';document.getElementById('bUpPlg').disabled=true;setTimeout(()=>{st.style.display='none';loadPlgs();},1500);}
-    }catch(e){toast(e.message,'err');st.textContent='Error: '+e.message;}
-  };
-  reader.onerror=()=>{toast('Failed to read file','err');st.style.display='none';};
-  reader.readAsDataURL(f);
-}
-
-async function loadPlgs(){
-  const r=await fetch('/api/plugins');const d=await r.json();
-  document.getElementById('plgCount').textContent=(d.plugins?.length||0)+' plugins';
-  const el=document.getElementById('plgList');
-  if(!d.plugins?.length){el.innerHTML='<div class="empty"><span class="empty-i">🔌</span>No plugins in plugins/ folder</div>';return;}
-  el.innerHTML=d.plugins.map(p=>`
-    <div class="plrow">
-      <span style="font-size:20px">🔌</span>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(p.name)}</div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--td)">${fmtB(p.size)}</div></div>
-      <button class="abtn danger sm" onclick="delPlg('${esc(p.name)}')">🗑 Delete</button>
-    </div>
-  `).join('');
-}
-
-async function delPlg(n){
-  if(!confirm('Delete '+n+'?'))return;
-  const r=await fetch('/api/plugins/'+encodeURIComponent(n),{method:'DELETE'});
-  const d=await r.json();toast(d.error||'Deleted',d.error?'err':'ok');
-  if(!d.error)loadPlgs();
-}
-
-// ─ Settings ─
-async function saveSettings(){
-  const body={memory:document.getElementById('sRam').value,serverJar:document.getElementById('sJar').value,
-    serverDir:document.getElementById('sDir').value,javaPath:document.getElementById('sJava').value};
-  const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const d=await r.json();toast(d.error||'Saved!',d.error?'err':'ok');if(!d.error)apCfg(d.config);
-}
-
-// ─ Tab nav ─
-document.querySelectorAll('[data-tab]').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    const t=btn.dataset.tab;
-    document.querySelectorAll('[data-tab]').forEach(b=>b.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-'+t).classList.add('active');
-    if(t==='properties')loadProps();
-    if(t==='plugins')loadPlgs();
-    if(t==='mods')loadMods();
-    if(t==='version')loadVI();
   });
-});
-
-// ─ Modal ─
-let mcb=null;
-function openM(title,body,lbl,cb,def=''){
-  document.getElementById('mtitle').textContent=title;
-  document.getElementById('mbody').textContent=body;
-  document.getElementById('minputs').innerHTML=
-    `<div class="minput"><label>${lbl}</label><input class="inp" id="mi" value="${esc(def)}"></div>`;
-  mcb=cb;document.getElementById('modal').classList.add('open');
-  setTimeout(()=>document.getElementById('mi')?.focus(),100);
 }
-function closeM(){document.getElementById('modal').classList.remove('open');}
-document.getElementById('mconf').onclick=async()=>{
-  const v=document.getElementById('mi')?.value||'';closeM();if(mcb)await mcb(v);
+
+const PMETA = {
+  'max-players': { l: 'Max Players', g: 'General', t: 'number' },
+  gamemode: { l: 'Default Gamemode', g: 'General', t: 'sel', o: ['survival', 'creative', 'adventure', 'spectator'] },
+  difficulty: { l: 'Difficulty', g: 'General', t: 'sel', o: ['peaceful', 'easy', 'normal', 'hard'] },
+  'level-name': { l: 'World Name', g: 'General' },
+  'level-type': { l: 'World Type', g: 'General', t: 'sel', o: ['minecraft:default', 'minecraft:flat', 'minecraft:large_biomes', 'minecraft:amplified'] },
+  'level-seed': { l: 'Seed', g: 'General' },
+  'server-port': { l: 'Port', g: 'Network', t: 'number' },
+  'online-mode': { l: 'Online Mode', g: 'Network', t: 'bool' },
+  'white-list': { l: 'Whitelist', g: 'Network', t: 'bool' },
+  'view-distance': { l: 'View Distance', g: 'Performance', t: 'number' },
+  'simulation-distance': { l: 'Simulation Distance', g: 'Performance', t: 'number' },
+  'max-tick-time': { l: 'Max Tick Time (ms)', g: 'Performance', t: 'number' },
+  'network-compression-threshold': { l: 'Compression Threshold', g: 'Performance', t: 'number' },
+  pvp: { l: 'PvP', g: 'World', t: 'bool' },
+  'spawn-monsters': { l: 'Spawn Monsters', g: 'World', t: 'bool' },
+  'spawn-animals': { l: 'Spawn Animals', g: 'World', t: 'bool' },
+  'spawn-npcs': { l: 'Spawn Villagers', g: 'World', t: 'bool' },
+  'allow-nether': { l: 'Allow Nether', g: 'World', t: 'bool' },
+  'allow-flight': { l: 'Allow Flight', g: 'World', t: 'bool' },
+  'generate-structures': { l: 'Generate Structures', g: 'World', t: 'bool' },
+  'spawn-protection': { l: 'Spawn Protection', g: 'World', t: 'number' },
+  'enable-command-block': { l: 'Command Blocks', g: 'World', t: 'bool' },
+  'force-gamemode': { l: 'Force Gamemode', g: 'Rules', t: 'bool' },
+  hardcore: { l: 'Hardcore', g: 'Rules', t: 'bool' },
+  'enable-rcon': { l: 'RCON', g: 'Advanced', t: 'bool' },
+  'rcon.port': { l: 'RCON Port', g: 'Advanced', t: 'number' },
+  'enable-query': { l: 'Query', g: 'Advanced', t: 'bool' },
 };
-document.getElementById('modal').onclick=e=>{if(e.target===e.currentTarget)closeM();};
 
-// ─ Toast ─
-let tt;
-function toast(msg,type='ok'){
-  const t=document.getElementById('toast');t.textContent=msg;t.className='show '+type;
-  clearTimeout(tt);tt=setTimeout(()=>t.className='',2500);
-}
-
-// ─ Util ─
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-
-function modFileChosen(){
-  const fi=document.getElementById('modFile');
-  const nm=document.getElementById('modFileName');
-  const btn=document.getElementById('bUpMod');
-  if(fi.files[0]){nm.textContent=fi.files[0].name;btn.disabled=false;}
-}
-function plgFileChosen(){
-  const fi=document.getElementById('plgFile');
-  const nm=document.getElementById('plgFileName');
-  const btn=document.getElementById('bUpPlg');
-  if(fi.files[0]){nm.textContent=fi.files[0].name;btn.disabled=false;}
-}
-
-// ─ Copy util ─
-function copyTxt(id){
-  const el=document.getElementById(id);
-  if(!el)return;
-  navigator.clipboard.writeText(el.textContent).then(()=>toast('Copied!','ok')).catch(()=>{
-    const ta=document.createElement('textarea');ta.value=el.textContent;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Copied!','ok');
-  });
-}
-
-// ─ Init ─
-connect();loadVerList();loadVI();
-apNetwork(null,null);
-
-document.addEventListener('keydown',e=>{
-  if(e.key==='/'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT'){
-    e.preventDefault();
-    document.querySelector('[data-tab="console"]').click();
-    setTimeout(()=>document.getElementById('cmdi').focus(),50);
+document.addEventListener('DOMContentLoaded', async () => {
+  bindEvents();
+  const authenticated = await checkAuth();
+  if (authenticated) {
+    bootstrap().catch((error) => toast(error.message, 'err'));
   }
 });
-
-function updateMOTD(){
-  const input=document.getElementById('motdInput');
-  const preview=document.getElementById('motdPreview');
-  if(input&&preview){
-    let text=input.value||'A DroidMC Minecraft Server';
-    // Basic color code rendering
-    text=text.replace(/§[0-9a-fA-Fk-or]/g,'');
-    preview.textContent=text;
-  }
-}
-
-function saveMOTD(){
-  const val=document.getElementById('motdInput')?.value;
-  if(!val)return;
-  // Could be saved via API in a real implementation
-  toast('MOTD updated!','ok');
-}

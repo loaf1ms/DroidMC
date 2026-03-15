@@ -1383,3 +1383,263 @@ body {
 .config-cards {
   grid-template-columns: repeat(3, 1fr);
 }
+
+.login-gate {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 10, 0.88);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 20px;
+}
+
+.login-gate.visible {
+  display: flex;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  background: linear-gradient(180deg, rgba(24,27,30,0.98), rgba(17,20,23,0.98));
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.login-card h1 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.login-card p {
+  color: var(--td);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.login-kicker,
+.login-label {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.login-kicker {
+  margin-bottom: 10px;
+}
+
+.login-label {
+  display: block;
+  margin: 14px 0 6px;
+}
+
+.login-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.login-note {
+  min-height: 18px;
+  margin-top: 12px;
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--td);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 12px;
+}
+
+.stack-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.health-box {
+  display: grid;
+  gap: 8px;
+}
+
+.health-row,
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.health-row:last-child,
+.list-row:last-child {
+  border-bottom: none;
+}
+
+.health-key {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--td);
+}
+
+.health-val {
+  flex: 1;
+  text-align: right;
+  font-size: 12px;
+  color: var(--t);
+}
+
+.admin-form,
+.backup-create,
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-actions {
+  margin-top: 16px;
+}
+
+.grow {
+  flex: 1;
+}
+
+.list-body {
+  margin-top: 10px;
+}
+
+.list-row.compact {
+  padding: 8px 0;
+}
+
+.file-shell {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.35fr) minmax(0, 0.65fr);
+  gap: 12px;
+}
+
+.file-list,
+.file-editor {
+  min-height: 420px;
+}
+
+.file-item {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--t);
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.file-item.active {
+  border-color: var(--green-border);
+  background: var(--green-glow);
+}
+
+.file-textarea {
+  width: 100%;
+  min-height: 340px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--t);
+  border-radius: 10px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
+
+.file-textarea:focus {
+  border-color: var(--green-border);
+}
+
+.mono-preview {
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compact-grid .cfg-row {
+  padding: 10px 0;
+}
+
+.check-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.check-pill.ok {
+  color: var(--green);
+  background: rgba(34,197,94,0.12);
+  border: 1px solid var(--green-border);
+}
+
+.check-pill.bad {
+  color: var(--amber);
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.28);
+}
+
+@media (max-width: 1100px) {
+  .split-grid,
+  .file-shell,
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+}
