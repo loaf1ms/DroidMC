@@ -21,7 +21,7 @@ step() {
   echo -e "${G}----------------------------------------${N}"
 }
 
-DROIDMC_VERSION="3.1.0"
+DROIDMC_VERSION="3.1.1"
 REPO_RAW="https://raw.githubusercontent.com/loaf1ms/DroidMC/main"
 UI_DIR="$HOME/DroidMC"
 MC_DIR="$HOME/minecraft"
