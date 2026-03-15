@@ -72,12 +72,13 @@ if command -v sha256sum >/dev/null 2>&1; then
   info "Verifying downloads..."
   (
     cd "$TMP_DIR"
-    sha256sum -c checksums.sha256 >/dev/null
+    sha256sum -c checksums.sha256
   ) || err "Checksum verification failed"
   log "Downloads verified"
 else
   warn "sha256sum not found, skipping checksum verification"
 fi
+
 
 if [ -f "$UI_DIR/.version" ]; then
   INSTALLED_VER="$(cat "$UI_DIR/.version")"
