@@ -8,7 +8,7 @@ Minecraft server panel that runs directly on your Android phone through Termux. 
 
 ---
 
-## v3.1.0
+## v3.1.2
 
 DroidMC v3 adds authentication, backups and restore, crash recovery, a file manager, validation tools, scheduled tasks, resource presets, and a safer install/update flow with checksum verification.
 
@@ -100,6 +100,7 @@ You will be asked whether to keep or delete world data before anything is remove
 - File visibility for plugins, mods, datapacks, and logs
 - Validation screen for Java, Node, RAM, auth, tmux, wake-lock, and jar presence
 - Safer install/update flow with staged downloads and checksum verification
+- https encryption
 
 ---
 
