@@ -36,6 +36,7 @@ The setup script will:
 - Back up panel files before updates
 - Ask whether to keep existing config and auth on reinstall
 - Prompt you to create the web panel username and password on the phone
+- Optionally generate a self-signed HTTPS certificate for the panel
 - Detect your RAM and suggest a server allocation
 - Install Java, Node.js, and optionally tmux
 
@@ -50,6 +51,11 @@ Open in your browser:
 
 - Same device: `http://localhost:8080`
 - Same WiFi: `http://your_phone_ip:8080`
+
+If you enable HTTPS during setup, use:
+
+- Same device: `https://localhost:8443`
+- Same WiFi: `https://your_phone_ip:8443`
 
 ---
 
@@ -80,6 +86,7 @@ You will be asked whether to keep or delete world data before anything is remove
 ## New in v3
 
 - Web panel authentication
+- Optional self-signed HTTPS certificate support
 - Login, logout, and in-panel credential changes
 - Crash detection with `crash.log`
 - Automatic restart after crashes
@@ -168,6 +175,7 @@ The setup script installs:
 
 - The panel binds to `0.0.0.0` so devices on your local network can reach it
 - Authentication is enabled in v3 and created during setup
+- HTTPS can be enabled with a self-signed certificate during setup
 - Do not port-forward the panel unless you know exactly what you are doing
 - Session login is browser-based and currently stored in memory by the panel process
 

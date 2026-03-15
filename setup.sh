@@ -114,7 +114,7 @@ fi
 step "Installing packages"
 
 pkg update -y 2>/dev/null || warn "pkg update reported warnings"
-pkg install -y openjdk-21 nodejs curl >/dev/null || err "Failed to install Java / Node.js / curl"
+pkg install -y openjdk-21 nodejs curl openssl >/dev/null || err "Failed to install Java / Node.js / curl / openssl"
 log "Java ready: $(java -version 2>&1 | head -1)"
 log "Node.js $(node --version) / npm $(npm --version)"
 
@@ -183,6 +183,20 @@ if [ "$CHANGE_AUTH" -eq 1 ]; then
   done
 fi
 
+ENABLE_HTTPS=0
+HTTPS_PORT="8443"
+HTTPS_CERT_DIR="$UI_DIR/certs"
+HTTPS_CERT_PATH="$HTTPS_CERT_DIR/cert.pem"
+HTTPS_KEY_PATH="$HTTPS_CERT_DIR/key.pem"
+
+step "HTTPS certificate"
+read -r -p "  Enable HTTPS for the web panel with a self-signed certificate? [Y/n]: " https_ans
+if [[ ! "$https_ans" =~ ^[Nn]$ ]]; then
+  ENABLE_HTTPS=1
+  read -r -p "  HTTPS port [default: 8443]: " https_port_input
+  HTTPS_PORT="${https_port_input:-8443}"
+fi
+
 step "Installing files"
 
 mkdir -p "$UI_DIR/public" "$MC_DIR" "$UI_DIR/backups" "$BACKUP_ROOT"
@@ -198,6 +212,15 @@ chmod +x "$HOME/uninstall-mc.sh"
 log "Panel files copied to $UI_DIR"
 
 if [ "$KEEP_CONFIG" -eq 0 ]; then
+  if [ "$ENABLE_HTTPS" -eq 1 ]; then
+    mkdir -p "$HTTPS_CERT_DIR"
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$HTTPS_KEY_PATH" \
+      -out "$HTTPS_CERT_PATH" \
+      -days 3650 \
+      -subj "/CN=DroidMC" >/dev/null 2>&1 || err "Failed to generate HTTPS certificate"
+    log "Self-signed HTTPS certificate generated"
+  fi
   cat > "$UI_DIR/config.json" <<EOF
 {
   "serverJar": "server.jar",
@@ -205,6 +228,10 @@ if [ "$KEEP_CONFIG" -eq 0 ]; then
   "memory": "$MC_RAM",
   "javaPath": "java",
   "uiPort": 8080,
+  "httpsEnabled": $( [ "$ENABLE_HTTPS" -eq 1 ] && echo "true" || echo "false" ),
+  "httpsPort": $HTTPS_PORT,
+  "httpsCertPath": "$HTTPS_CERT_PATH",
+  "httpsKeyPath": "$HTTPS_KEY_PATH",
   "serverType": "",
   "serverVersion": "",
   "preset": "balanced",
@@ -272,12 +299,19 @@ MC_DIR="${MC_DIR:-$HOME/minecraft}"
 UI_DIR="${UI_DIR:-$HOME/DroidMC}"
 UI_PORT="8080"
 MC_VERBOSE="1"
+HTTPS_ENABLED="$(node -e "try{const fs=require('fs');const j=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(j.httpsEnabled?'1':'0')}catch{process.stdout.write('0')}" "$UI_DIR/config.json")"
+HTTPS_PORT="$(node -e "try{const fs=require('fs');const j=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(String(j.httpsPort||8443))}catch{process.stdout.write('8443')}" "$UI_DIR/config.json")"
 command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock
 LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo ""
 echo "  DroidMC starting..."
-echo "  Browser (this phone):  http://localhost:$UI_PORT"
-[ -n "$LOCAL_IP" ] && echo "  Browser (same WiFi):   http://$LOCAL_IP:$UI_PORT"
+if [ "$HTTPS_ENABLED" = "1" ]; then
+  echo "  Browser (this phone):  https://localhost:$HTTPS_PORT"
+  [ -n "$LOCAL_IP" ] && echo "  Browser (same WiFi):   https://$LOCAL_IP:$HTTPS_PORT"
+else
+  echo "  Browser (this phone):  http://localhost:$UI_PORT"
+  [ -n "$LOCAL_IP" ] && echo "  Browser (same WiFi):   http://$LOCAL_IP:$UI_PORT"
+fi
 echo ""
 cd "$UI_DIR"
 MC_VERBOSE=1 node server.js
@@ -286,10 +320,12 @@ chmod +x "$HOME/start-mc.sh"
 log "Created ~/start-mc.sh"
 
 if command -v tmux >/dev/null 2>&1; then
-  cat > "$HOME/start-mc-bg.sh" <<'EOF'
+cat > "$HOME/start-mc-bg.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 UI_DIR="${UI_DIR:-$HOME/DroidMC}"
 UI_PORT="8080"
+HTTPS_ENABLED="$(node -e "try{const fs=require('fs');const j=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(j.httpsEnabled?'1':'0')}catch{process.stdout.write('0')}" "$UI_DIR/config.json")"
+HTTPS_PORT="$(node -e "try{const fs=require('fs');const j=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(String(j.httpsPort||8443))}catch{process.stdout.write('8443')}" "$UI_DIR/config.json")"
 command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock
 if tmux has-session -t mc 2>/dev/null; then
   echo ""
@@ -301,8 +337,13 @@ else
   LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
   echo ""
   echo "  DroidMC started in background (tmux: mc)"
-  echo "  Browser (this phone): http://localhost:$UI_PORT"
-  [ -n "$LOCAL_IP" ] && echo "  Browser (WiFi):       http://$LOCAL_IP:$UI_PORT"
+  if [ "$HTTPS_ENABLED" = "1" ]; then
+    echo "  Browser (this phone): https://localhost:$HTTPS_PORT"
+    [ -n "$LOCAL_IP" ] && echo "  Browser (WiFi):       https://$LOCAL_IP:$HTTPS_PORT"
+  else
+    echo "  Browser (this phone): http://localhost:$UI_PORT"
+    [ -n "$LOCAL_IP" ] && echo "  Browser (WiFi):       http://$LOCAL_IP:$UI_PORT"
+  fi
   echo ""
 fi
 EOF
@@ -317,6 +358,11 @@ echo -e "  ${D}Panel path:${N}      $UI_DIR"
 echo -e "  ${D}Server path:${N}     $MC_DIR"
 echo -e "  ${D}Panel login:${N}     $AUTH_USER"
 echo -e "  ${D}Backup folder:${N}   $UI_DIR/backups"
+if [ "$ENABLE_HTTPS" -eq 1 ]; then
+  echo -e "  ${D}Panel URL:${N}       https://localhost:$HTTPS_PORT"
+else
+  echo -e "  ${D}Panel URL:${N}       http://localhost:8080"
+fi
 echo -e "  ${D}Foreground:${N}      ~/start-mc.sh"
 command -v tmux >/dev/null 2>&1 && echo -e "  ${D}Background:${N}      ~/start-mc-bg.sh"
 echo ""

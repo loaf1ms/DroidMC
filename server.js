@@ -38,6 +38,10 @@ const CONFIG_DEFAULTS = {
   memory: process.env.MC_RAM || '1G',
   javaPath: process.env.JAVA || 'java',
   uiPort: Number.parseInt(process.env.UI_PORT || '8080', 10) || 8080,
+  httpsEnabled: false,
+  httpsPort: Number.parseInt(process.env.HTTPS_PORT || '8443', 10) || 8443,
+  httpsCertPath: path.join(UI_DIR, 'certs', 'cert.pem'),
+  httpsKeyPath: path.join(UI_DIR, 'certs', 'key.pem'),
   serverType: '',
   serverVersion: '',
   preset: 'balanced',
@@ -104,8 +108,6 @@ const MANAGED_TEXT_FILES = [
 ];
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
 
 let CONFIG = loadConfig();
 let AUTH = loadAuth();
@@ -132,6 +134,8 @@ let schedulerState = {
   lastBroadcastAt: 0,
   lastRestartSlot: '',
 };
+let server;
+let wss;
 
 const VERBOSE = process.env.MC_VERBOSE === '1';
 const ANSI = {
@@ -608,6 +612,14 @@ function getServerPort() {
   return props['server-port'] || '25565';
 }
 
+function hasHttpsConfig() {
+  return !!(CONFIG.httpsEnabled
+    && CONFIG.httpsKeyPath
+    && CONFIG.httpsCertPath
+    && fs.existsSync(CONFIG.httpsKeyPath)
+    && fs.existsSync(CONFIG.httpsCertPath));
+}
+
 function getNetworkInfo() {
   const interfaces = os.networkInterfaces();
   const addresses = [];
@@ -629,6 +641,8 @@ function getNetworkInfo() {
     addresses,
     mcPort: getServerPort(),
     panelPort: CONFIG.uiPort,
+    panelSecurePort: hasHttpsConfig() ? CONFIG.httpsPort : null,
+    panelProtocol: hasHttpsConfig() ? 'https' : 'http',
   };
 }
 
@@ -1891,6 +1905,18 @@ app.post('/api/config', (req, res) => {
   if (req.body?.javaPath) {
     nextConfig.javaPath = String(req.body.javaPath).trim();
   }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'httpsEnabled')) {
+    nextConfig.httpsEnabled = !!req.body.httpsEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'httpsPort')) {
+    nextConfig.httpsPort = Math.max(1, Number.parseInt(req.body.httpsPort, 10) || 8443);
+  }
+  if (req.body?.httpsCertPath) {
+    nextConfig.httpsCertPath = path.resolve(String(req.body.httpsCertPath).trim());
+  }
+  if (req.body?.httpsKeyPath) {
+    nextConfig.httpsKeyPath = path.resolve(String(req.body.httpsKeyPath).trim());
+  }
   if (req.body?.preset && PRESETS[req.body.preset]) {
     nextConfig.preset = req.body.preset;
   }
@@ -2236,6 +2262,31 @@ app.get('/api/validation', (req, res) => {
   res.json(collectValidation());
 });
 
+app.use(express.static(STATIC_DIR));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(STATIC_DIR, 'index.html'));
+});
+
+updateSystemStats();
+setInterval(updateSystemStats, 1000);
+setInterval(maybeRunScheduledTasks, 30 * 1000);
+
+function createPanelServer() {
+  if (hasHttpsConfig()) {
+    const tlsOptions = {
+      key: fs.readFileSync(CONFIG.httpsKeyPath),
+      cert: fs.readFileSync(CONFIG.httpsCertPath),
+    };
+    return { instance: https.createServer(tlsOptions, app), protocol: 'https', port: CONFIG.httpsPort };
+  }
+  return { instance: http.createServer(app), protocol: 'http', port: CONFIG.uiPort };
+}
+
+const panelServer = createPanelServer();
+server = panelServer.instance;
+wss = new WebSocketServer({ server });
+
 wss.on('connection', (socket, req) => {
   if (AUTH.authRequired && !getSessionFromRequest(req)) {
     socket.close(4001, 'auth');
@@ -2261,18 +2312,8 @@ wss.on('connection', (socket, req) => {
   });
 });
 
-app.use(express.static(STATIC_DIR));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(STATIC_DIR, 'index.html'));
-});
-
-updateSystemStats();
-setInterval(updateSystemStats, 1000);
-setInterval(maybeRunScheduledTasks, 30 * 1000);
-
-server.listen(CONFIG.uiPort, '0.0.0.0', () => {
+server.listen(panelServer.port, '0.0.0.0', () => {
   const network = getNetworkInfo();
-  console.log(`\n  DroidMC panel: http://localhost:${CONFIG.uiPort}`);
-  console.log(`  LAN address:   http://${network.lanIp}:${CONFIG.uiPort}\n`);
+  console.log(`\n  DroidMC panel: ${panelServer.protocol}://localhost:${panelServer.port}`);
+  console.log(`  LAN address:   ${panelServer.protocol}://${network.lanIp}:${panelServer.port}\n`);
 });

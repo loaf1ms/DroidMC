@@ -271,10 +271,14 @@ function applyConfig(config) {
 function applyNetwork(network) {
   if (!network) return;
   state.network = { ...state.network, ...network };
-  $('serverAddr').textContent = `${state.network.lanIp || 'localhost'}:${state.network.panelPort || location.port || 8080}`;
+  const protocol = state.network.panelProtocol || 'http';
+  const port = protocol === 'https'
+    ? (state.network.panelSecurePort || state.network.panelPort || location.port || 8443)
+    : (state.network.panelPort || location.port || 8080);
+  $('serverAddr').textContent = `${state.network.lanIp || 'localhost'}:${port}`;
   $('ciIP').textContent = state.network.lanIp || location.hostname;
   $('ciPort').textContent = state.network.mcPort || '25565';
-  $('panelLAN').textContent = `http://${state.network.lanIp || location.hostname}:${state.network.panelPort || location.port || 8080}`;
+  $('panelLAN').textContent = `${protocol}://${state.network.lanIp || location.hostname}:${port}`;
   $('aLAN').textContent = `${state.network.lanIp || location.hostname}:${state.network.mcPort || '25565'}`;
 }
 
