@@ -59,6 +59,7 @@
     </div>
 
     <nav class="tabnav">
+      <div class="tab-indicator" id="tabIndicator"></div>
       <button class="tnav active" data-tab-target="dash">Dashboard</button>
       <button class="tnav" data-tab-target="console">Console</button>
       <button class="tnav" data-tab-target="players">Players</button>
@@ -162,6 +163,45 @@
               </div>
             </div>
           </div>
+
+        <div class="dash-live-row">
+          <div class="panel">
+            <div class="panel-header-row">
+              <div>
+                <div class="panel-title">Live Console</div>
+                <div class="panel-sub">Recent server output</div>
+              </div>
+              <button class="panel-link" onclick="setTab('console')">Open Console →</button>
+            </div>
+            <div class="mini-console-feed" id="miniConsole">
+              <div class="empty-mini">No output yet</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header-row">
+              <div>
+                <div class="panel-title">Online Players</div>
+                <div class="panel-sub" id="miniPlayerSub">0 online</div>
+              </div>
+              <button class="panel-link" onclick="setTab('players')">View All →</button>
+            </div>
+            <div class="mini-player-grid" id="miniPlayers">
+              <div class="empty-mini">No players online</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header-row">
+              <div>
+                <div class="panel-title">Recent Backups</div>
+                <div class="panel-sub">Last 3 snapshots</div>
+              </div>
+              <button class="panel-link" onclick="setTab('backups')">View All →</button>
+            </div>
+            <div class="mini-backup-list" id="miniBackups">
+              <div class="empty-mini">No backups yet</div>
+            </div>
+          </div>
+        </div>
         </div>
       </section>
 
@@ -181,6 +221,7 @@
               <button class="abtn ghost sm" id="clearConsoleBtn">Clear</button>
             </div>
           </div>
+          <button class="jump-latest" id="jumpLatest">↓ Jump to latest</button>
           <div id="console"></div>
           <div class="cmdbar">
             <span class="cpfx">/</span>
@@ -627,6 +668,7 @@
 
     <div id="toast"></div>
 
+    <div class="ws-banner" id="wsBanner"><div class="ws-spinner"></div><span>Reconnecting to server…</span></div>
     <script src="/app.js"></script>
   </body>
 </html>

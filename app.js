@@ -130,6 +130,11 @@ async function login(event) {
     await bootstrap();
   } catch (error) {
     $('loginNote').textContent = error.message;
+    const card = $('loginForm');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+    setTimeout(() => card.classList.remove('shake'), 500);
   }
 }
 
@@ -147,9 +152,11 @@ function connectSocket() {
   if (state.ws) return;
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   state.ws = new WebSocket(`${protocol}://${location.host}`);
+  state.ws.onopen = () => setWsStatus(true);
   state.ws.onmessage = (event) => handleSocket(JSON.parse(event.data));
   state.ws.onclose = (event) => {
     state.ws = null;
+    setWsStatus(false);
     if (event.code === 4001) {
       showLogin(true, 'Session expired');
       return;
@@ -214,8 +221,14 @@ function applyStatus(status) {
   state.lastCrash = status.lastCrash || null;
 
   const running = !!status.running;
+  const wasStopped = $('statusBadge').classList.contains('stopped');
   $('statusBadge').className = `status-badge ${running ? 'running' : 'stopped'}`;
   $('badgeTxt').textContent = running ? 'RUNNING' : 'STOPPED';
+  if (running && wasStopped) {
+    void $('statusBadge').offsetWidth;
+    $('statusBadge').classList.add('burst');
+    setTimeout(() => $('statusBadge').classList.remove('burst'), 600);
+  }
   $('btnStart').disabled = running;
   $('btnStopTop').disabled = !running;
   $('btnRestart').disabled = !running;
@@ -282,8 +295,8 @@ function updateStats() {
   const cpuColor = cpu > 70 ? 'var(--red)' : cpu > 40 ? 'var(--amber)' : 'var(--green)';
   const ramColor = ramPct > 80 ? 'var(--red)' : ramPct > 60 ? 'var(--amber)' : 'var(--green)';
   const diskColor = diskPct > 90 ? 'var(--red)' : diskPct > 75 ? 'var(--amber)' : 'var(--blue)';
-  $('tCpu').textContent = `${cpu.toFixed(cpu % 1 ? 1 : 0)}%`;
-  $('tRam').textContent = ramMB >= 1024 ? `${(ramMB / 1024).toFixed(1)}G` : `${Math.round(ramMB)}M`;
+  flashIfChanged('tCpu', `${cpu.toFixed(cpu % 1 ? 1 : 0)}%`);
+  flashIfChanged('tRam', ramMB >= 1024 ? `${(ramMB / 1024).toFixed(1)}G` : `${Math.round(ramMB)}M`);
   $('dCpu').textContent = `${cpu.toFixed(cpu % 1 ? 1 : 0)}%`;
   $('dRam').textContent = ramMB >= 1024 ? `${(ramMB / 1024).toFixed(1)} GB` : `${Math.round(ramMB)} MB`;
   $('dDisk').textContent = fmtBytes(diskUsed);
@@ -330,10 +343,13 @@ function appendLog(entry, force = false) {
   const row = document.createElement('div');
   row.className = `ll ${entry.type || 'log'}`;
   row.innerHTML = `<span class="lt">${esc(entry.time || '')}</span><span class="lm">${esc(entry.text || '')}</span>`;
-  $('console').appendChild(row);
-  if ($('autoScroll').checked) {
-    $('console').scrollTop = $('console').scrollHeight;
+  if (!force) {
+    row.classList.add('new');
+    setTimeout(() => row.classList.remove('new'), 700);
   }
+  $('console').appendChild(row);
+  if ($('autoScroll').checked) $('console').scrollTop = $('console').scrollHeight;
+  if (!force) { updateMiniConsole(); updateJumpLatest(); }
 }
 
 function setFilter(filter) {
@@ -345,14 +361,26 @@ function setFilter(filter) {
 }
 
 function renderPlayers() {
-  $('tPl').textContent = String(state.players.length);
-  $('plCount').textContent = `${state.players.length} online`;
+  const prev = parseInt($('tPl').textContent) || 0;
+  const curr = state.players.length;
+  $('tPl').textContent = String(curr);
+  $('plCount').textContent = `${curr} online`;
+  if (prev !== curr) {
+    $('tPl').classList.remove('bounce');
+    void $('tPl').offsetWidth;
+    $('tPl').classList.add('bounce');
+    setTimeout(() => $('tPl').classList.remove('bounce'), 500);
+  }
   if (!state.players.length) {
-    $('plList').innerHTML = '<div class="empty">No players online</div>';
+    $('plList').innerHTML = '<div class="empty-state"><div class="es-icon">👥</div><div class="es-txt">No players online</div></div>';
+    renderMiniPlayers();
     return;
   }
   $('plList').innerHTML = state.players.map((player) => `
-    <div class="prow">
+    <div class="prow entering">
+      <div class="pavatar">
+        <img src="https://crafatar.com/avatars/${esc(player.name)}?size=34&overlay" alt="${esc(player.name)}" onerror="this.parentNode.innerHTML='&#x1F9D1;'" />
+      </div>
       <div class="propinfo">
         <div class="propname">${esc(player.name)}</div>
         <div class="propkey">Online now</div>
@@ -366,6 +394,7 @@ function renderPlayers() {
       </div>
     </div>
   `).join('');
+  renderMiniPlayers();
 }
 
 function renderAdminList(type) {
@@ -405,6 +434,7 @@ function renderBackups() {
       </div>
     </div>
   `).join('');
+  renderMiniBackups();
 }
 
 function renderFiles() {
@@ -442,7 +472,7 @@ function renderDownload() {
   $('dlName').textContent = state.download.name || 'Downloading...';
   $('dlPct').textContent = `${state.download.done ? 100 : pct}%`;
   $('pbf').style.width = `${state.download.done ? 100 : pct}%`;
-  $('pbf').className = `pbfill${state.download.error ? ' err' : state.download.done ? ' done' : ''}`;
+  $('pbf').className = `pbfill${state.download.error ? ' err' : state.download.done ? ' done' : ' loading'}`;
   $('dlSub').textContent = state.download.error
     ? `Error: ${state.download.error}`
     : state.download.done
@@ -497,6 +527,12 @@ function setTab(name) {
   document.querySelectorAll('.tab').forEach((node) => {
     node.classList.toggle('active', node.id === `tab-${name}`);
   });
+  const activeBtn = document.querySelector(`.tnav[data-tab-target="${name}"]`);
+  const ind = $('tabIndicator');
+  if (activeBtn && ind) {
+    ind.style.left = activeBtn.offsetLeft + 'px';
+    ind.style.width = activeBtn.offsetWidth + 'px';
+  }
 }
 
 async function sendCommand(command) {
@@ -529,6 +565,7 @@ async function saveSettings() {
   applyConfig(config.config);
   renderBackups();
   toast('Settings saved', 'ok');
+  showBtnSuccess($('saveSettingsBtn'));
 }
 
 async function saveAuth() {
@@ -543,6 +580,7 @@ async function saveAuth() {
   $('authCurrentPassword').value = '';
   $('authNewPassword').value = '';
   toast('Credentials updated', 'ok');
+  showBtnSuccess($('saveAuthBtn'));
 }
 
 async function loadStatus() {
@@ -587,6 +625,10 @@ async function openManagedFile(key) {
   $('fileEditor').disabled = !result.editable;
   $('saveFileBtn').disabled = !result.editable;
   renderFiles();
+  setTimeout(() => {
+    const af = document.querySelector('.file-item.active');
+    if (af) { af.classList.add('flash'); setTimeout(() => af.classList.remove('flash'), 350); }
+  }, 0);
 }
 
 async function loadAdminLists() {
@@ -687,6 +729,7 @@ async function saveMotd() {
   await api('/api/properties', { method: 'POST', body: { motd: $('motdInput').value } });
   $('motdPreview').textContent = $('motdInput').value || '';
   toast('MOTD saved', 'ok');
+  showBtnSuccess($('saveMotdBtn'));
 }
 
 async function createBackup() {
@@ -694,6 +737,12 @@ async function createBackup() {
   $('backupLabel').value = '';
   await loadBackups();
   toast('Backup created', 'ok');
+  const firstRow = $('backupList').querySelector('.list-row');
+  if (firstRow) {
+    firstRow.classList.add('new-row');
+    setTimeout(() => firstRow.classList.remove('new-row'), 900);
+  }
+  renderMiniBackups();
 }
 
 async function restoreBackup(id) {
@@ -809,7 +858,12 @@ function bindEvents() {
   $('clearConsoleBtn').addEventListener('click', () => { state.logs = []; renderLogs(); });
   document.querySelectorAll('[data-tab-target]').forEach((node) => node.addEventListener('click', () => setTab(node.dataset.tabTarget)));
   document.querySelectorAll('[data-filter]').forEach((node) => node.addEventListener('click', () => setFilter(node.dataset.filter)));
-  document.querySelectorAll('[data-command]').forEach((node) => node.addEventListener('click', () => sendCommand(node.dataset.command).catch((error) => toast(error.message, 'err'))));
+  document.querySelectorAll('[data-command]').forEach((node) => node.addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash');
+    setTimeout(() => b.classList.remove('flash'), 400);
+    sendCommand(node.dataset.command).catch((error) => toast(error.message, 'err'));
+  }));
   $('broadcastBtn').addEventListener('click', async () => {
     const value = await openPrompt('Broadcast', 'Send a message to all players.', 'Message');
     if (value) sendCommand(`say ${value}`).catch((error) => toast(error.message, 'err'));
@@ -870,6 +924,17 @@ function bindEvents() {
   $('addOpBtn').addEventListener('click', () => addAdmin('ops').catch((error) => toast(error.message, 'err')));
   $('addBanBtn').addEventListener('click', () => addAdmin('bans').catch((error) => toast(error.message, 'err')));
   $('psrch').addEventListener('input', () => renderProperties(state.props, $('psrch').value.trim()));
+  // ripple on all buttons
+  document.querySelectorAll('.hbtn, .abtn').forEach(addRipple);
+  // console scroll → jump pill
+  $('console').addEventListener('scroll', updateJumpLatest);
+  if ($('jumpLatest')) {
+    $('jumpLatest').addEventListener('click', () => {
+      $('console').scrollTop = $('console').scrollHeight;
+      $('jumpLatest').classList.remove('visible');
+      $('autoScroll').checked = true;
+    });
+  }
   document.body.addEventListener('click', async (event) => {
     const target = event.target.closest('[data-player-action],[data-admin-remove],[data-restore-backup],[data-delete-backup],[data-file-key],[data-delete-mod],[data-delete-plugin],[data-preset],[data-version-type]');
     if (!target) return;
@@ -888,6 +953,8 @@ function bindEvents() {
       } else if (target.dataset.restoreBackup) {
         await restoreBackup(target.dataset.restoreBackup);
       } else if (target.dataset.deleteBackup) {
+        const dRow = target.closest('.list-row');
+        if (dRow) { dRow.classList.add('removing'); await new Promise(r => setTimeout(r, 240)); }
         await deleteBackup(target.dataset.deleteBackup);
       } else if (target.dataset.fileKey) {
         await openManagedFile(target.dataset.fileKey);
@@ -901,6 +968,8 @@ function bindEvents() {
         await api(`/api/presets/${target.dataset.preset}`, { method: 'POST' });
         await Promise.all([loadStatus(), loadProperties(), api('/api/presets').then((data) => { state.presets = data.presets || {}; renderPresets(); })]);
         toast('Preset applied', 'ok');
+        const pr = $('presetList').querySelector('.abtn.primary');
+        if (pr) { const row = pr.closest('.list-row'); if (row) { row.classList.add('new-row'); setTimeout(() => row.classList.remove('new-row'), 900); } }
       } else if (target.dataset.versionType) {
         state.selectedVersionType = target.dataset.versionType;
         document.querySelectorAll('[data-version-type]').forEach((node) => node.classList.toggle('active', node.dataset.versionType === state.selectedVersionType));
@@ -942,8 +1011,101 @@ const PMETA = {
   'enable-query': { l: 'Query', g: 'Advanced', t: 'bool' },
 };
 
+
+// ── UI Animation & Helper Functions ──────────────────────────────
+
+function flashIfChanged(id, newVal) {
+  const el = $(id);
+  if (!el) return;
+  if (el.textContent !== newVal) {
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 500);
+  }
+  el.textContent = newVal;
+}
+
+function showBtnSuccess(btn) {
+  if (!btn) return;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '✓ Saved';
+  btn.classList.add('success');
+  setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('success'); }, 1800);
+}
+
+function addRipple(btn) {
+  btn.addEventListener('click', function(e) {
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top - size / 2;
+    const r = document.createElement('span');
+    r.className = 'ripple';
+    r.style.cssText = 'width:' + size + 'px;height:' + size + 'px;left:' + x + 'px;top:' + y + 'px';
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 550);
+  });
+}
+
+function updateJumpLatest() {
+  const cons = $('console');
+  const btn = $('jumpLatest');
+  if (!cons || !btn) return;
+  const atBottom = cons.scrollHeight - cons.scrollTop - cons.clientHeight < 80;
+  btn.classList.toggle('visible', !atBottom && state.logs.length > 0);
+}
+
+function setWsStatus(connected) {
+  const banner = $('wsBanner');
+  if (banner) banner.classList.toggle('visible', !connected);
+}
+
+function updateMiniConsole() {
+  const feed = $('miniConsole');
+  if (!feed) return;
+  const recent = state.logs.filter(e => e.type !== 'tick').slice(-8);
+  if (!recent.length) { feed.innerHTML = '<div class="empty-mini">No output yet</div>'; return; }
+  feed.innerHTML = recent.map(e =>
+    '<div class="mcl ' + (e.type || 'log') + '"><span class="lt">' + esc(e.time || '') + '</span><span class="lm">' + esc(e.text || '') + '</span></div>'
+  ).join('');
+}
+
+function renderMiniPlayers() {
+  const el = $('miniPlayers');
+  const sub = $('miniPlayerSub');
+  if (!el) return;
+  if (sub) sub.textContent = state.players.length + ' online';
+  if (!state.players.length) { el.innerHTML = '<div class="empty-mini">No players online</div>'; return; }
+  el.innerHTML = state.players.slice(0, 5).map(function(player) {
+    return '<div class="mini-player-row"><div class="mini-avatar"><img src="https://crafatar.com/avatars/' + esc(player.name) + '?size=24&overlay" onerror="this.parentNode.innerHTML=\'&#x1F9D1;\'" /></div><span class="mini-player-name">' + esc(player.name) + '</span></div>';
+  }).join('');
+}
+
+function renderMiniBackups() {
+  const el = $('miniBackups');
+  if (!el) return;
+  if (!state.backups.length) { el.innerHTML = '<div class="empty-mini">No backups yet</div>'; return; }
+  el.innerHTML = state.backups.slice(0, 3).map(function(b) {
+    return '<div class="mini-backup-row"><span class="mini-backup-icon">💾</span><span class="mini-backup-name">' + esc(b.label || b.id) + '</span><span class="mini-backup-time">' + esc(b.createdAt || '') + '</span></div>';
+  }).join('');
+}
+
+function initTabIndicator() {
+  const active = document.querySelector('.tnav.active');
+  const ind = $('tabIndicator');
+  if (active && ind) {
+    ind.style.left = active.offsetLeft + 'px';
+    ind.style.width = active.offsetWidth + 'px';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
+  initTabIndicator();
+  updateMiniConsole();
+  renderMiniPlayers();
+  renderMiniBackups();
   const authenticated = await checkAuth();
   if (authenticated) {
     bootstrap().catch((error) => toast(error.message, 'err'));

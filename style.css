@@ -112,6 +112,12 @@ body {
   color: var(--red);
 }
 
+.status-badge.connecting {
+  background: rgba(245,158,11,0.1);
+  border-color: rgba(245,158,11,0.3);
+  color: var(--amber);
+}
+
 .status-badge.running {
   background: rgba(34,197,94,0.1);
   border-color: var(--green-border);
@@ -1642,4 +1648,422 @@ body {
   .admin-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   DROIDMC ANIMATION PACK
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Login: slide-up entrance ── */
+.login-gate.visible .login-card {
+  animation: login-enter 0.35s cubic-bezier(0.34,1.3,0.64,1);
+}
+@keyframes login-enter {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Login: backdrop blur-in ── */
+.login-gate.visible {
+  animation: backdrop-in 0.3s ease both;
+}
+@keyframes backdrop-in {
+  from { background: rgba(4,8,10,0); backdrop-filter: blur(0); }
+  to   { background: rgba(4,8,10,0.88); backdrop-filter: blur(6px); }
+}
+
+/* ── Login: shake on bad password ── */
+.login-gate.visible .login-card.shake {
+  animation: shake 0.5s cubic-bezier(0.36,0.07,0.19,0.97) !important;
+}
+@keyframes shake {
+  0%   { transform: translateX(0);     border-color: var(--border2); box-shadow: none; }
+  15%  { transform: translateX(-10px); border-color: rgba(239,68,68,0.6); box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+  30%  { transform: translateX(10px);  border-color: rgba(239,68,68,0.6); box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+  45%  { transform: translateX(-8px);  border-color: rgba(239,68,68,0.5); }
+  60%  { transform: translateX(8px);   border-color: rgba(239,68,68,0.5); }
+  75%  { transform: translateX(-4px);  border-color: rgba(239,68,68,0.3); }
+  90%  { transform: translateX(4px);   border-color: rgba(239,68,68,0.2); }
+  100% { transform: translateX(0);     border-color: var(--border2); box-shadow: none; }
+}
+
+/* ── Modal: scale-in ── */
+.mbg.open .modal {
+  animation: modal-enter 0.22s cubic-bezier(0.34,1.25,0.64,1);
+}
+@keyframes modal-enter {
+  from { opacity: 0; transform: scale(0.93); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Stat cards: stagger entrance ── */
+.tab.active .stat-card {
+  animation: card-enter 0.35s ease both;
+}
+.tab.active .stat-card:nth-child(1) { animation-delay: 0.03s; }
+.tab.active .stat-card:nth-child(2) { animation-delay: 0.09s; }
+.tab.active .stat-card:nth-child(3) { animation-delay: 0.15s; }
+.tab.active .stat-card:nth-child(4) { animation-delay: 0.21s; }
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Stat bar: grow on load ── */
+@keyframes bar-grow {
+  from { width: 0 !important; }
+}
+.stat-bar-fill {
+  animation: bar-grow 0.9s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── Console: line slide-in ── */
+@keyframes log-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+.ll.new { animation: log-enter 0.18s ease; }
+@keyframes log-warn-flash {
+  0%   { opacity: 0; transform: translateY(5px); background: rgba(245,158,11,0.14); }
+  50%  { background: rgba(245,158,11,0.14); }
+  100% { opacity: 1; transform: none; background: transparent; }
+}
+@keyframes log-err-flash {
+  0%   { opacity: 0; transform: translateY(5px); background: rgba(239,68,68,0.14); }
+  50%  { background: rgba(239,68,68,0.14); }
+  100% { opacity: 1; transform: none; background: transparent; }
+}
+.ll.new.warn  { animation: log-warn-flash 0.28s ease; }
+.ll.new.error { animation: log-err-flash  0.28s ease; }
+
+/* ── Player row: enter animation ── */
+.prow.entering {
+  animation: prow-enter 0.28s cubic-bezier(0.34,1.3,0.64,1) both;
+}
+@keyframes prow-enter {
+  from { opacity: 0; transform: translateX(-12px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Player row: leave animation ── */
+.prow.leaving {
+  animation: prow-leave 0.22s ease forwards;
+  pointer-events: none;
+}
+@keyframes prow-leave {
+  to { opacity: 0; transform: translateX(12px); max-height: 0; margin-bottom: 0; }
+}
+
+/* ── Button: ripple effect ── */
+.hbtn, .abtn { position: relative; overflow: hidden; }
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  transform: scale(0);
+  animation: ripple-go 0.55s ease;
+  pointer-events: none;
+}
+@keyframes ripple-go {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* ── Quick command: flash on click ── */
+.qbtn:active { transform: scale(0.95); }
+.qbtn.flash {
+  animation: qbtn-flash 0.38s ease;
+}
+@keyframes qbtn-flash {
+  0%   { background: var(--panel2); border-color: var(--border); color: var(--t); }
+  35%  { background: rgba(34,197,94,0.18); border-color: var(--green-border); color: var(--green); }
+  100% { background: var(--panel2); border-color: var(--border); color: var(--t); }
+}
+
+/* ── Chip value: flash on change ── */
+.schip-val.flash {
+  animation: chip-flash 0.42s ease;
+}
+@keyframes chip-flash {
+  0%,100% { color: var(--t); }
+  30% { color: var(--green); text-shadow: 0 0 8px rgba(34,197,94,0.5); }
+}
+
+/* ── Player count chip: bounce ── */
+.schip-val.bounce {
+  animation: count-bounce 0.42s cubic-bezier(0.34,1.7,0.64,1);
+}
+@keyframes count-bounce {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.45); }
+  100% { transform: scale(1); }
+}
+
+/* ── Status badge: burst when server starts ── */
+.status-badge.burst {
+  animation: badge-burst 0.55s cubic-bezier(0.34,1.4,0.64,1);
+}
+@keyframes badge-burst {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+  45%  { transform: scale(1.18); box-shadow: 0 0 0 10px rgba(34,197,94,0); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+/* ── Download bar: shimmer ── */
+.pbfill.loading { position: relative; overflow: hidden; }
+.pbfill.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0 -100% 0 -100%;
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
+  animation: shimmer 1.5s linear infinite;
+}
+@keyframes shimmer { to { transform: translateX(200%); } }
+
+/* ── Backup row: flash new / animate remove ── */
+.list-row.new-row {
+  animation: row-flash 0.85s ease;
+}
+@keyframes row-flash {
+  0%,100% { background: transparent; }
+  30%     { background: rgba(34,197,94,0.1); border-radius: 6px; }
+}
+.list-row.removing {
+  animation: row-remove 0.24s ease forwards;
+  overflow: hidden;
+}
+@keyframes row-remove {
+  to { opacity: 0; max-height: 0; padding: 0; border-width: 0; }
+}
+
+/* ── File item: flash on select ── */
+.file-item.flash {
+  animation: file-flash 0.32s ease;
+}
+@keyframes file-flash {
+  0%   { background: var(--panel2); }
+  40%  { background: rgba(34,197,94,0.15); border-color: var(--green-border); }
+  100% { background: var(--panel2); }
+}
+
+/* ── Save button: success state ── */
+.abtn.success {
+  background: rgba(34,197,94,0.15) !important;
+  border-color: var(--green-border) !important;
+  color: var(--green) !important;
+  animation: btn-ok 0.22s ease;
+}
+@keyframes btn-ok {
+  from { transform: scale(0.94); }
+  to   { transform: scale(1); }
+}
+
+/* ── WS disconnect banner ── */
+.ws-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  background: rgba(245,158,11,0.1);
+  border-bottom: 1px solid rgba(245,158,11,0.3);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 16px;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+.ws-banner.visible { transform: translateY(0); }
+.ws-spinner {
+  width: 10px; height: 10px;
+  border: 2px solid rgba(245,158,11,0.3);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Tab active indicator (sliding underline) ── */
+.tab-indicator {
+  position: absolute;
+  bottom: -1px;
+  height: 2px;
+  background: var(--green);
+  border-radius: 2px;
+  pointer-events: none;
+  transition: left 0.26s cubic-bezier(0.4,0,0.2,1), width 0.26s cubic-bezier(0.4,0,0.2,1);
+}
+/* Hide the per-button bottom border so only our indicator shows */
+.tnav.active { border-bottom-color: transparent; }
+
+/* ── Console jump-to-latest pill ── */
+.jump-latest {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--panel2);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 10;
+  white-space: nowrap;
+}
+.jump-latest.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.cwrap { position: relative; }
+
+/* ── Empty state (players) ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 0 24px;
+  gap: 8px;
+}
+.es-icon { font-size: 32px; opacity: 0.5; }
+.es-txt  { font-size: 13px; color: var(--td); }
+
+/* ── Dashboard bottom: live panels ── */
+.dash-live-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.mini-console-feed {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  max-height: 190px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 10px;
+}
+
+.mcl {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0 2px 6px;
+  border-left: 2px solid transparent;
+}
+.mcl .lt { color: var(--tm); font-size: 10px; flex-shrink: 0; padding-top: 1px; }
+.mcl .lm { color: var(--td); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.mcl.warn  { border-left-color: rgba(245,158,11,0.6); } .mcl.warn  .lm { color: var(--amber); }
+.mcl.error { border-left-color: rgba(239,68,68,0.7);  } .mcl.error .lm { color: var(--red);   }
+.mcl.system .lm { color: var(--green); opacity: 0.9; }
+.mcl.player { border-left-color: rgba(167,139,250,0.5); } .mcl.player .lm { color: var(--purple); }
+.mcl.cmd .lm { color: var(--blue); font-weight: 600; }
+
+.panel-link {
+  background: none;
+  border: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  padding: 0;
+}
+.panel-link:hover { opacity: 1; text-decoration: underline; }
+
+.mini-player-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mini-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.mini-avatar {
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  background: var(--panel3);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mini-avatar img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+
+.mini-player-name { font-size: 12px; font-weight: 600; }
+
+.empty-mini {
+  color: var(--tm);
+  font-size: 11px;
+  font-family: var(--mono);
+  text-align: center;
+  padding: 18px 0;
+}
+
+.mini-backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mini-backup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.mini-backup-icon { font-size: 14px; flex-shrink: 0; }
+
+.mini-backup-name {
+  font-size: 12px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--t);
+}
+
+.mini-backup-time {
+  font-size: 10px;
+  color: var(--td);
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
+@media (max-width: 1200px) {
+  .dash-live-row { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .dash-live-row { grid-template-columns: 1fr; }
 }
