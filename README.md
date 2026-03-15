@@ -63,7 +63,7 @@ You'll be asked whether to keep or delete your world data, and given a final con
 - **Player management** — Kick, ban, unban, OP, gamemode, teleport, heal, feed
 - **Plugins & Mods** — Upload and delete `.jar` files
 - **Properties editor** — Edit `server.properties` from the browser
-- **System stats** — Live CPU *(broken at the moment)* and RAM usage with ring gauges
+- **System stats** — Live CPU and RAM usage with ring gauges
 - **How to Connect card** — Shows your IP, port, server type and version at a glance
 
 ---
